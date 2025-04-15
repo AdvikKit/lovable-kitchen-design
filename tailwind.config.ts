@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,7 +62,19 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+                kitchen: {
+                    primary: 'hsl(var(--kitchen-primary))',
+                    'primary-foreground': 'hsl(var(--kitchen-primary-foreground))',
+                    'sidebar-bg': 'hsl(var(--kitchen-sidebar-bg))',
+                    'sidebar-fg': 'hsl(var(--kitchen-sidebar-fg))',
+                    'canvas-bg': 'hsl(var(--kitchen-canvas-bg))',
+                    'grid': 'hsl(var(--kitchen-grid))',
+                    'wall': 'hsl(var(--kitchen-wall))',
+                    'wall-selected': 'hsl(var(--kitchen-wall-selected))',
+                    'door': 'hsl(var(--kitchen-door))',
+                    'window': 'hsl(var(--kitchen-window))',
+                }
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
@@ -84,11 +97,22 @@ export default {
 					to: {
 						height: '0'
 					}
-				}
+				},
+                'fadeIn': {
+                    from: {
+                        opacity: '0',
+                        transform: 'translateY(-10px)'
+                    },
+                    to: {
+                        opacity: '1',
+                        transform: 'translateY(0)'
+                    }
+                }
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+                'fadeIn': 'fadeIn 0.3s ease-out'
 			}
 		}
 	},

@@ -1,0 +1,78 @@
+
+import React, { createContext, useContext, useState, ReactNode } from 'react';
+
+// Types
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface Wall {
+  id: string;
+  label: string;
+  start: Point;
+  end: Point;
+  thickness: number;
+}
+
+export interface Room {
+  width: number;
+  length: number;
+  height: number;
+  walls: Wall[];
+}
+
+interface DesignContextProps {
+  room: Room | null;
+  setRoom: (room: Room | null) => void;
+  selectedWall: string | null;
+  setSelectedWall: (wallId: string | null) => void;
+  isGridVisible: boolean;
+  toggleGrid: () => void;
+  gridSize: number;
+  setGridSize: (size: number) => void;
+  zoom: number;
+  setZoom: (zoom: number) => void;
+  panOffset: Point;
+  setPanOffset: (offset: Point) => void;
+}
+
+const DesignContext = createContext<DesignContextProps | undefined>(undefined);
+
+export const useDesignContext = () => {
+  const context = useContext(DesignContext);
+  if (!context) {
+    throw new Error('useDesignContext must be used within a DesignProvider');
+  }
+  return context;
+};
+
+export const DesignProvider = ({ children }: { children: ReactNode }) => {
+  const [room, setRoom] = useState<Room | null>(null);
+  const [selectedWall, setSelectedWall] = useState<string | null>(null);
+  const [isGridVisible, setIsGridVisible] = useState<boolean>(true);
+  const [gridSize, setGridSize] = useState<number>(100); // 100mm grid
+  const [zoom, setZoom] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
+
+  const toggleGrid = () => {
+    setIsGridVisible(!isGridVisible);
+  };
+
+  const value = {
+    room,
+    setRoom,
+    selectedWall,
+    setSelectedWall,
+    isGridVisible,
+    toggleGrid,
+    gridSize,
+    setGridSize,
+    zoom,
+    setZoom,
+    panOffset,
+    setPanOffset,
+  };
+
+  return <DesignContext.Provider value={value}>{children}</DesignContext.Provider>;
+};
