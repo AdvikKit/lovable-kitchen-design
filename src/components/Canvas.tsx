@@ -1,9 +1,8 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
 import Ruler from './Ruler';
-import { ZoomIn, ZoomOut, Eye, RotateCcw } from 'lucide-react';
+import { ZoomIn, ZoomOut, Eye, RotateCcw, Move, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mmToPixels, calculateMidpoint, formatMm } from '../utils/measurements';
 import { toast } from '@/components/ui/use-toast';
@@ -18,12 +17,17 @@ const Canvas: React.FC = () => {
     panOffset, 
     setPanOffset,
     elevationMode,
-    setElevationMode
+    setElevationMode,
+    selectedCabinet,
+    setSelectedCabinet,
+    setRoom
   } = useDesignContext();
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
+  const [isMovingCabinet, setIsMovingCabinet] = useState(false);
+  const [cabinetStartPos, setCabinetStartPos] = useState({ x: 0, y: 0 });
   
   // Reset view to fit room in viewport
   const resetView = () => {
@@ -129,16 +133,54 @@ const Canvas: React.FC = () => {
   
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) { // Left mouse button
-      setIsDragging(true);
-      setStartPan({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+      if (isMovingCabinet && selectedCabinet) {
+        // Start moving cabinet
+        setCabinetStartPos({
+          x: e.clientX,
+          y: e.clientY
+        });
+      } else {
+        // Normal canvas dragging
+        setIsDragging(true);
+        setStartPan({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+      }
     }
   };
   
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
+    if (isDragging && !isMovingCabinet) {
+      // Pan canvas
       setPanOffset({
         x: e.clientX - startPan.x,
         y: e.clientY - startPan.y,
+      });
+    } else if (isMovingCabinet && selectedCabinet && room) {
+      // Move selected cabinet
+      const dx = (e.clientX - cabinetStartPos.x) / zoom; // Convert to mm
+      const dy = (e.clientY - cabinetStartPos.y) / zoom;
+      
+      setCabinetStartPos({
+        x: e.clientX,
+        y: e.clientY
+      });
+      
+      // Update cabinet position
+      const updatedCabinets = room.cabinets.map(cabinet => {
+        if (cabinet.id === selectedCabinet.id) {
+          return {
+            ...cabinet,
+            position: {
+              x: cabinet.position.x + dx,
+              y: cabinet.position.y + dy
+            }
+          };
+        }
+        return cabinet;
+      });
+      
+      setRoom({
+        ...room,
+        cabinets: updatedCabinets
       });
     }
   };
@@ -162,6 +204,45 @@ const Canvas: React.FC = () => {
       setElevationMode(true);
       setSelectedWall(wallId);
     }
+  };
+  
+  const handleCabinetClick = (e: React.MouseEvent, cabinetId: string) => {
+    e.stopPropagation();
+    
+    if (!room) return;
+    
+    const cabinet = room.cabinets.find(c => c.id === cabinetId);
+    if (cabinet) {
+      setSelectedCabinet(selectedCabinet?.id === cabinetId ? null : cabinet);
+    }
+  };
+  
+  const toggleCabinetMovement = () => {
+    setIsMovingCabinet(!isMovingCabinet);
+    toast({
+      title: isMovingCabinet ? "Cabinet Movement Disabled" : "Cabinet Movement Enabled",
+      description: isMovingCabinet ? 
+        "You can now interact with other elements." : 
+        "Click and drag the cabinet to move it."
+    });
+  };
+  
+  const deleteCabinet = () => {
+    if (!room || !selectedCabinet) return;
+    
+    const updatedCabinets = room.cabinets.filter(cabinet => cabinet.id !== selectedCabinet.id);
+    
+    setRoom({
+      ...room,
+      cabinets: updatedCabinets
+    });
+    
+    setSelectedCabinet(null);
+    
+    toast({
+      title: "Cabinet Deleted",
+      description: `${selectedCabinet.name} has been removed from your design.`
+    });
   };
   
   const renderWalls = () => {
@@ -251,6 +332,180 @@ const Canvas: React.FC = () => {
     });
   };
   
+  const renderCabinets = () => {
+    if (!room || !room.cabinets || room.cabinets.length === 0 || elevationMode) return null;
+    
+    return room.cabinets.map((cabinet) => {
+      const x = mmToPixels(cabinet.position.x, zoom);
+      const y = mmToPixels(cabinet.position.y, zoom);
+      const width = mmToPixels(cabinet.width, zoom);
+      const height = mmToPixels(cabinet.depth, zoom); // In top view, depth is height
+      const isSelected = selectedCabinet?.id === cabinet.id;
+      
+      // Base color based on cabinet color
+      let fillColor = cabinet.color;
+      if (fillColor === 'natural') fillColor = '#E3C395';
+      else if (fillColor === 'walnut') fillColor = '#5C4033';
+      else if (fillColor === 'cherry') fillColor = '#6E2E1C';
+      
+      return (
+        <g 
+          key={cabinet.id} 
+          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px) rotate(${cabinet.rotation}, ${width/2}, ${height/2})`}
+          onClick={(e) => handleCabinetClick(e, cabinet.id)}
+          style={{ cursor: isMovingCabinet && isSelected ? 'move' : 'pointer' }}
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill={fillColor}
+            stroke={isSelected ? "#3b82f6" : "#475569"}
+            strokeWidth={isSelected ? "2" : "1"}
+            opacity="0.8"
+          />
+          
+          {cabinet.type === 'base' && (
+            <rect 
+              x={width * 0.1} 
+              y={height * 0.1} 
+              width={width * 0.8} 
+              height={height * 0.8} 
+              fill="none"
+              stroke="#475569"
+              strokeWidth="1"
+              strokeDasharray="2,2"
+            />
+          )}
+          
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={cabinet.color === 'black' ? "white" : "black"}
+            fontSize={Math.max(8, 12 * zoom)}
+            fontWeight="bold"
+          >
+            {cabinet.name}
+          </text>
+          
+          <text 
+            x={width / 2} 
+            y={(height / 2) + 15 * zoom}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={cabinet.color === 'black' ? "white" : "black"}
+            fontSize={Math.max(6, 10 * zoom)}
+          >
+            {cabinet.width}×{cabinet.height}mm
+          </text>
+          
+          {isSelected && (
+            <g className="cabinet-controls">
+              <g 
+                transform={`translate(${width - 20}, ${-20})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCabinetMovement();
+                }}
+              >
+                <circle cx="0" cy="0" r="15" fill={isMovingCabinet ? "#3b82f6" : "#94a3b8"} />
+                <foreignObject x="-8" y="-8" width="16" height="16">
+                  <Move size={16} color="white" />
+                </foreignObject>
+              </g>
+              
+              <g 
+                transform={`translate(${width - 20}, ${20})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteCabinet();
+                }}
+              >
+                <circle cx="0" cy="0" r="15" fill="#ef4444" />
+                <foreignObject x="-8" y="-8" width="16" height="16">
+                  <Trash2 size={16} color="white" />
+                </foreignObject>
+              </g>
+            </g>
+          )}
+        </g>
+      );
+    });
+  };
+  
+  const renderElevationCabinets = () => {
+    if (!elevationMode || !selectedWall || !room || !room.cabinets || room.cabinets.length === 0) return null;
+    
+    // Filter cabinets assigned to the selected wall
+    const wallCabinets = room.cabinets.filter(cabinet => cabinet.wallId === selectedWall);
+    
+    const wall = room.walls.find(w => w.id === selectedWall);
+    if (!wall) return null;
+    
+    // Calculate wall length
+    const wallLengthMm = Math.sqrt(
+      Math.pow(wall.end.x - wall.start.x, 2) + 
+      Math.pow(wall.end.y - wall.start.y, 2)
+    );
+    
+    return wallCabinets.map((cabinet) => {
+      const x = mmToPixels(cabinet.position.x, zoom); // Position along wall
+      const y = mmToPixels(room.height - cabinet.position.y - cabinet.height, zoom); // Position from bottom
+      const width = mmToPixels(cabinet.width, zoom);
+      const height = mmToPixels(cabinet.height, zoom);
+      const isSelected = selectedCabinet?.id === cabinet.id;
+      
+      // Base color based on cabinet color
+      let fillColor = cabinet.color;
+      if (fillColor === 'natural') fillColor = '#E3C395';
+      else if (fillColor === 'walnut') fillColor = '#5C4033';
+      else if (fillColor === 'cherry') fillColor = '#6E2E1C';
+      
+      return (
+        <g 
+          key={cabinet.id} 
+          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px)`}
+          onClick={(e) => handleCabinetClick(e, cabinet.id)}
+          style={{ cursor: 'pointer' }}
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill={fillColor}
+            stroke={isSelected ? "#3b82f6" : "#475569"}
+            strokeWidth={isSelected ? "2" : "1"}
+          />
+          
+          {/* Cabinet handle */}
+          <rect 
+            x={width * 0.45} 
+            y={height * 0.5} 
+            width={width * 0.1} 
+            height={height * 0.2} 
+            fill="#94a3b8"
+          />
+          
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={cabinet.color === 'black' ? "white" : "black"}
+            fontSize={Math.max(8, 12 * zoom)}
+            fontWeight="bold"
+          >
+            {cabinet.name}
+          </text>
+        </g>
+      );
+    });
+  };
+  
   const renderElevation = () => {
     if (!elevationMode || !selectedWall || !room) return null;
     
@@ -307,6 +562,8 @@ const Canvas: React.FC = () => {
           strokeWidth="2"
         />
         
+        {renderElevationCabinets()}
+        
         <g
           onClick={() => setElevationMode(false)}
           style={{ cursor: 'pointer' }}
@@ -352,7 +609,12 @@ const Canvas: React.FC = () => {
           {!elevationMode && <Ruler />}
           <g transform={`translate(${elevationMode ? 0 : 30}px, ${elevationMode ? 0 : 30}px)`}> 
             {!elevationMode && <Grid />}
-            {elevationMode ? renderElevation() : renderWalls()}
+            {elevationMode ? renderElevation() : (
+              <>
+                {renderWalls()}
+                {renderCabinets()}
+              </>
+            )}
           </g>
         </svg>
       </div>

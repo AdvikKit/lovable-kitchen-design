@@ -2,22 +2,59 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Search } from 'lucide-react';
-import cabinetCatalog, { CabinetType, Cabinet } from '../data/cabinetCatalog';
+import { Search, Move, Edit, Box } from 'lucide-react';
+import cabinetCatalog, { CabinetType, Cabinet as CatalogCabinet } from '../data/cabinetCatalog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import CabinetCustomizationModal from './CabinetCustomizationModal';
+import { useDesignContext, Cabinet } from '../context/DesignContext';
+import { toast } from '@/components/ui/use-toast';
 
 interface CabinetCatalogProps {
-  onSelectCabinet: (cabinet: Cabinet) => void;
+  onSelectCabinet: (cabinet: CatalogCabinet) => void;
 }
 
 const CabinetCatalog: React.FC<CabinetCatalogProps> = ({ onSelectCabinet }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [activeTab, setActiveTab] = useState<CabinetType>('base');
+  const [selectedCatalogCabinet, setSelectedCatalogCabinet] = useState<CatalogCabinet | null>(null);
+  const [isCustomizationModalOpen, setIsCustomizationModalOpen] = useState<boolean>(false);
+  
+  const { 
+    room, 
+    setRoom, 
+    selectedWall,
+    setSelectedCabinet,
+    setCustomizingCabinet
+  } = useDesignContext();
   
   const filteredCabinets = cabinetCatalog[activeTab].filter(cabinet => 
     cabinet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cabinet.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
+  
+  const handleCabinetSelect = (cabinet: CatalogCabinet) => {
+    setSelectedCatalogCabinet(cabinet);
+    setIsCustomizationModalOpen(true);
+    onSelectCabinet(cabinet);
+  };
+  
+  const handleAddCustomCabinet = (newCabinet: Cabinet) => {
+    if (!room) return;
+    
+    const updatedRoom = {
+      ...room,
+      cabinets: [...(room.cabinets || []), newCabinet]
+    };
+    
+    setRoom(updatedRoom);
+    setSelectedCabinet(newCabinet);
+    setCustomizingCabinet(false);
+    
+    toast({
+      title: "Cabinet Added",
+      description: `${newCabinet.name} has been added to your design.`
+    });
+  };
   
   return (
     <div className="cabinet-catalog w-full">
@@ -46,16 +83,24 @@ const CabinetCatalog: React.FC<CabinetCatalogProps> = ({ onSelectCabinet }) => {
               <div 
                 key={cabinet.id}
                 className="bg-slate-700 p-2 rounded cursor-pointer hover:bg-slate-600 transition-colors"
-                onClick={() => onSelectCabinet(cabinet)}
+                onClick={() => handleCabinetSelect(cabinet)}
               >
                 <div className="bg-slate-800 h-24 flex items-center justify-center mb-2 rounded">
-                  {/* Would show cabinet thumbnail here. Using placeholder for now */}
                   <div className="w-16 h-16 bg-slate-700 rounded flex items-center justify-center text-sm">
-                    {cabinet.type[0].toUpperCase()}
+                    <Box className="w-10 h-10 text-white opacity-70" />
                   </div>
                 </div>
                 <div className="text-xs font-medium truncate">{cabinet.name}</div>
                 <div className="text-[10px] text-gray-400">{cabinet.width}W x {cabinet.height}H x {cabinet.depth}D mm</div>
+                <div className="flex items-center justify-between mt-1">
+                  <div className="text-[10px] bg-blue-800 px-1.5 py-0.5 rounded text-blue-100">
+                    {cabinet.type}
+                  </div>
+                  <div className="flex gap-1">
+                    <Edit className="w-3 h-3 text-gray-400" />
+                    <Move className="w-3 h-3 text-gray-400" />
+                  </div>
+                </div>
               </div>
             ))}
             
@@ -67,6 +112,16 @@ const CabinetCatalog: React.FC<CabinetCatalogProps> = ({ onSelectCabinet }) => {
           </div>
         </ScrollArea>
       </Tabs>
+      
+      {selectedCatalogCabinet && (
+        <CabinetCustomizationModal
+          isOpen={isCustomizationModalOpen}
+          onClose={() => setIsCustomizationModalOpen(false)}
+          cabinet={selectedCatalogCabinet}
+          onAddCabinet={handleAddCustomCabinet}
+          wallId={selectedWall}
+        />
+      )}
     </div>
   );
 };

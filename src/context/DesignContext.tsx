@@ -15,11 +15,25 @@ export interface Wall {
   thickness: number;
 }
 
+export interface Cabinet {
+  id: string;
+  type: string;
+  name: string;
+  width: number;
+  height: number;
+  depth: number;
+  position: Point;
+  rotation: number;
+  wallId: string | null;
+  color: string;
+}
+
 export interface Room {
   width: number;
   length: number;
   height: number;
   walls: Wall[];
+  cabinets: Cabinet[];
 }
 
 interface DesignContextProps {
@@ -35,6 +49,10 @@ interface DesignContextProps {
   setPanOffset: (offset: Point) => void;
   elevationMode: boolean;
   setElevationMode: (mode: boolean) => void;
+  selectedCabinet: Cabinet | null;
+  setSelectedCabinet: (cabinet: Cabinet | null) => void;
+  customizingCabinet: boolean;
+  setCustomizingCabinet: (customizing: boolean) => void;
 }
 
 const DesignContext = createContext<DesignContextProps | undefined>(undefined);
@@ -55,6 +73,8 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
   const [zoom, setZoom] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
   const [elevationMode, setElevationMode] = useState<boolean>(false);
+  const [selectedCabinet, setSelectedCabinet] = useState<Cabinet | null>(null);
+  const [customizingCabinet, setCustomizingCabinet] = useState<boolean>(false);
 
   const value = {
     room,
@@ -69,6 +89,10 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
     setPanOffset,
     elevationMode,
     setElevationMode,
+    selectedCabinet,
+    setSelectedCabinet,
+    customizingCabinet,
+    setCustomizingCabinet,
   };
 
   return <DesignContext.Provider value={value}>{children}</DesignContext.Provider>;

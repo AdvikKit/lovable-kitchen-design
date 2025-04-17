@@ -16,16 +16,29 @@ import {
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
-  const { room, setRoom } = useDesignContext();
+  const { 
+    room, 
+    setRoom,
+    elevationMode,
+    setElevationMode
+  } = useDesignContext();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   
   const handleCreateRoom = (newRoom: any) => {
-    setRoom(newRoom);
+    // Initialize room with empty cabinets array if not present
+    setRoom({
+      ...newRoom,
+      cabinets: newRoom.cabinets || []
+    });
   };
   
   const handleSelectCabinet = (cabinet: Cabinet) => {
     console.log('Selected cabinet:', cabinet);
-    // We'll implement actual cabinet placement in a future update
+    // Cabinet selection is now handled in CabinetCatalog
+  };
+  
+  const handle3DView = () => {
+    setElevationMode(!elevationMode);
   };
   
   return (
@@ -87,11 +100,12 @@ const Sidebar: React.FC = () => {
           <div className="space-y-2">
             <Button 
               className="w-full flex items-center justify-start text-white gap-2"
-              variant="outline"
+              variant={elevationMode ? "default" : "outline"}
+              onClick={handle3DView}
               disabled={!room}
             >
               <Eye size={18} />
-              <span>3D View</span>
+              <span>Elevation View</span>
             </Button>
           </div>
           
