@@ -18,20 +18,20 @@ const Header: React.FC = () => {
           variant="outline" 
           size="sm"
           disabled={!room}
-          className="text-xs h-8"
+          className="text-xs h-8 text-white"
         >
           <Save size={16} className="mr-1" />
-          Save
+          <span>Save</span>
         </Button>
         
         <Button 
           variant="outline" 
           size="sm"
           disabled={!room}
-          className="text-xs h-8"
+          className="text-xs h-8 text-white"
         >
           <FileDown size={16} className="mr-1" />
-          Export
+          <span>Export</span>
         </Button>
         
         <Button 
@@ -40,6 +40,7 @@ const Header: React.FC = () => {
           className="text-xs h-8"
         >
           <Settings size={16} />
+          <span className="ml-1">Settings</span>
         </Button>
       </div>
     </header>

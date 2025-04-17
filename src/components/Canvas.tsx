@@ -3,6 +3,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
 import Ruler from './Ruler';
+import { ZoomIn, ZoomOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { mmToPixels, calculateMidpoint, formatMm } from '../utils/measurements';
 
 const Canvas: React.FC = () => {
@@ -25,6 +27,16 @@ const Canvas: React.FC = () => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const newZoom = Math.max(0.5, Math.min(5, zoom + delta));
+    setZoom(newZoom);
+  };
+
+  const handleZoomIn = () => {
+    const newZoom = Math.min(5, zoom + 0.1);
+    setZoom(newZoom);
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(0.5, zoom - 0.1);
     setZoom(newZoom);
   };
   
@@ -101,6 +113,8 @@ const Canvas: React.FC = () => {
             x2={endX} 
             y2={endY}
             className={selectedWall === wall.id ? "kitchen-wall-selected" : "kitchen-wall"}
+            strokeWidth="2"
+            stroke={selectedWall === wall.id ? "#3b82f6" : "#475569"}
           />
           
           {/* Wall label */}
@@ -108,6 +122,8 @@ const Canvas: React.FC = () => {
             x={midpoint.x + labelOffsetX} 
             y={midpoint.y + labelOffsetY}
             className="kitchen-wall-label"
+            fill="#475569"
+            fontSize="12"
             transform={isVertical ? `rotate(90,${midpoint.x},${midpoint.y})` : ''}
           >
             Wall {wall.label}
@@ -118,6 +134,8 @@ const Canvas: React.FC = () => {
             x={midpoint.x + dimensionOffsetX} 
             y={midpoint.y + dimensionOffsetY}
             className="kitchen-wall-dimension"
+            fill="#475569"
+            fontSize="10"
             transform={isVertical ? `rotate(90,${midpoint.x},${midpoint.y})` : ''}
           >
             {formatMm(wallLengthMm, wallLengthMm >= 1000)}
@@ -128,22 +146,38 @@ const Canvas: React.FC = () => {
   };
   
   return (
-    <div 
-      ref={canvasRef}
-      className="kitchen-canvas w-full h-full bg-slate-100 overflow-hidden"
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    >
-      <svg width="100%" height="100%">
-        <Ruler />
-        <g transform={`translate(${30}px, ${30}px)`}> {/* Offset for rulers */}
-          <Grid />
-          {renderWalls()}
-        </g>
-      </svg>
+    <div className="flex flex-col h-full">
+      <div className="flex justify-end p-2 bg-slate-200">
+        <div className="flex items-center">
+          <span className="mr-2 text-sm">Zoom: {Math.round(zoom * 100)}%</span>
+          <Button variant="outline" size="sm" onClick={handleZoomOut} className="mr-1">
+            <ZoomOut size={16} />
+            <span className="ml-1">Zoom Out</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleZoomIn}>
+            <ZoomIn size={16} />
+            <span className="ml-1">Zoom In</span>
+          </Button>
+        </div>
+      </div>
+      
+      <div 
+        ref={canvasRef}
+        className="kitchen-canvas w-full h-full bg-slate-100 overflow-hidden"
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        <svg width="100%" height="100%">
+          <Ruler />
+          <g transform={`translate(${30}px, ${30}px)`}> {/* Offset for rulers */}
+            <Grid />
+            {renderWalls()}
+          </g>
+        </svg>
+      </div>
     </div>
   );
 };

@@ -6,13 +6,13 @@ import { mmToPixels } from '../utils/measurements';
 const Grid: React.FC = () => {
   const { isGridVisible, gridSize, zoom, room, panOffset } = useDesignContext();
   
-  if (!isGridVisible || !room) {
+  if (!isGridVisible) {
     return null;
   }
   
   const gridSizePixels = mmToPixels(gridSize, zoom);
-  const width = mmToPixels(room.width, zoom);
-  const height = mmToPixels(room.length, zoom);
+  const width = room ? mmToPixels(room.width, zoom) : 5000;
+  const height = room ? mmToPixels(room.length, zoom) : 5000;
   
   // Create horizontal and vertical grid lines
   const horizontalLines = [];
@@ -37,6 +37,9 @@ const Grid: React.FC = () => {
         x2={endX}
         y2={y}
         transform={`translate(${panOffset.x}px, ${panOffset.y}px)`}
+        stroke="#e2e8f0"
+        strokeWidth="1"
+        strokeDasharray={gridSize >= 250 ? "" : "2,2"}
       />
     );
   }
@@ -51,6 +54,9 @@ const Grid: React.FC = () => {
         x2={x}
         y2={endY}
         transform={`translate(${panOffset.x}px, ${panOffset.y}px)`}
+        stroke="#e2e8f0"
+        strokeWidth="1"
+        strokeDasharray={gridSize >= 250 ? "" : "2,2"}
       />
     );
   }

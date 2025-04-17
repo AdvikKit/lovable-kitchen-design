@@ -27,7 +27,7 @@ const Sidebar: React.FC = () => {
   };
   
   return (
-    <div className="kitchen-sidebar w-64 h-full flex flex-col">
+    <div className="kitchen-sidebar w-64 h-full bg-slate-800 text-white overflow-y-auto">
       <div className="p-4">
         <h2 className="text-xl font-bold mb-4">KitchenDesigner</h2>
         <Separator className="my-2 bg-gray-600" />
@@ -37,11 +37,11 @@ const Sidebar: React.FC = () => {
           <div className="space-y-2">
             <Button 
               onClick={() => setIsRoomModalOpen(true)} 
-              className="w-full flex items-center justify-start gap-2"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
             >
               <Home size={18} />
-              {room ? 'Edit Room' : 'Create Room'}
+              <span>{room ? 'Edit Room' : 'Create Room'}</span>
             </Button>
           </div>
           
@@ -50,30 +50,30 @@ const Sidebar: React.FC = () => {
           <h3 className="text-sm font-semibold uppercase text-gray-400">Elements</h3>
           <div className="space-y-2">
             <Button 
-              className="w-full flex items-center justify-start gap-2 opacity-50"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
             >
               <DoorClosed size={18} />
-              Add Door
+              <span>Add Door</span>
             </Button>
             
             <Button 
-              className="w-full flex items-center justify-start gap-2 opacity-50"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
             >
               <AppWindow size={18} />
-              Add Window
+              <span>Add Window</span>
             </Button>
             
             <Button 
-              className="w-full flex items-center justify-start gap-2 opacity-50"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
             >
               <Box size={18} />
-              Add Cabinet
+              <span>Add Cabinet</span>
             </Button>
           </div>
           
@@ -87,7 +87,7 @@ const Sidebar: React.FC = () => {
               variant={isGridVisible ? "default" : "outline"}
             >
               <Grid3x3 size={18} />
-              {isGridVisible ? "Hide Grid" : "Show Grid"}
+              <span>{isGridVisible ? "Hide Grid" : "Show Grid"}</span>
             </Button>
             
             <div className="flex flex-col space-y-1">
@@ -95,7 +95,7 @@ const Sidebar: React.FC = () => {
               <select 
                 value={gridSize} 
                 onChange={(e) => setGridSize(parseInt(e.target.value))}
-                className="bg-gray-700 rounded px-2 py-1 text-sm"
+                className="bg-slate-700 rounded px-2 py-1 text-sm w-full"
               >
                 <option value={50}>50mm</option>
                 <option value={100}>100mm</option>
@@ -105,12 +105,12 @@ const Sidebar: React.FC = () => {
             </div>
             
             <Button 
-              className="w-full flex items-center justify-start gap-2 opacity-50"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
             >
               <Eye size={18} />
-              3D View
+              <span>3D View</span>
             </Button>
           </div>
           
@@ -119,20 +119,20 @@ const Sidebar: React.FC = () => {
           <h3 className="text-sm font-semibold uppercase text-gray-400">Project</h3>
           <div className="space-y-2">
             <Button 
-              className="w-full flex items-center justify-start gap-2 opacity-50"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
             >
               <Save size={18} />
-              Save Design
+              <span>Save Design</span>
             </Button>
             
             <Button 
-              className="w-full flex items-center justify-start gap-2"
+              className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
             >
               <Upload size={18} />
-              Load Design
+              <span>Load Design</span>
             </Button>
           </div>
         </div>
