@@ -35,6 +35,8 @@ interface DesignContextProps {
   setZoom: (zoom: number) => void;
   panOffset: Point;
   setPanOffset: (offset: Point) => void;
+  elevationMode: boolean;
+  setElevationMode: (mode: boolean) => void;
 }
 
 const DesignContext = createContext<DesignContextProps | undefined>(undefined);
@@ -54,6 +56,7 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
   const [gridSize, setGridSize] = useState<number>(100); // 100mm grid
   const [zoom, setZoom] = useState<number>(1);
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
+  const [elevationMode, setElevationMode] = useState<boolean>(false);
 
   const toggleGrid = () => {
     setIsGridVisible(!isGridVisible);
@@ -72,6 +75,8 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
     setZoom,
     panOffset,
     setPanOffset,
+    elevationMode,
+    setElevationMode,
   };
 
   return <DesignContext.Provider value={value}>{children}</DesignContext.Provider>;

@@ -18,29 +18,29 @@ const Header: React.FC = () => {
           variant="outline" 
           size="sm"
           disabled={!room}
-          className="text-xs h-8 text-white"
+          className="text-xs h-8 text-white hover:bg-slate-700"
         >
           <Save size={16} className="mr-1" />
-          <span>Save</span>
+          Save
         </Button>
         
         <Button 
           variant="outline" 
           size="sm"
           disabled={!room}
-          className="text-xs h-8 text-white"
+          className="text-xs h-8 text-white hover:bg-slate-700"
         >
           <FileDown size={16} className="mr-1" />
-          <span>Export</span>
+          Export
         </Button>
         
         <Button 
           variant="ghost" 
           size="sm"
-          className="text-xs h-8"
+          className="text-xs h-8 text-white hover:bg-slate-700"
         >
-          <Settings size={16} />
-          <span className="ml-1">Settings</span>
+          <Settings size={16} className="mr-1" />
+          Settings
         </Button>
       </div>
     </header>

@@ -1,9 +1,8 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
 import Ruler from './Ruler';
-import { ZoomIn, ZoomOut } from 'lucide-react';
+import { ZoomIn, ZoomOut, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mmToPixels, calculateMidpoint, formatMm } from '../utils/measurements';
 
@@ -15,19 +14,47 @@ const Canvas: React.FC = () => {
     zoom, 
     setZoom, 
     panOffset, 
-    setPanOffset 
+    setPanOffset,
+    elevationMode,
+    setElevationMode
   } = useDesignContext();
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   
-  // Handle canvas zooming
+  useEffect(() => {
+    if (room && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const canvasWidth = canvas.clientWidth;
+      const canvasHeight = canvas.clientHeight;
+      
+      const centerX = (canvasWidth / 2) - (mmToPixels(room.width, zoom) / 2);
+      const centerY = (canvasHeight / 2) - (mmToPixels(room.length, zoom) / 2);
+      
+      setPanOffset({ x: centerX - 30, y: centerY - 30 });
+    }
+  }, [room, zoom]);
+  
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const newZoom = Math.max(0.5, Math.min(5, zoom + delta));
-    setZoom(newZoom);
+    
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      const newPanOffsetX = mouseX - ((mouseX - panOffset.x) * (newZoom / zoom));
+      const newPanOffsetY = mouseY - ((mouseY - panOffset.y) * (newZoom / zoom));
+      
+      setZoom(newZoom);
+      setPanOffset({ x: newPanOffsetX, y: newPanOffsetY });
+    } else {
+      setZoom(newZoom);
+    }
   };
 
   const handleZoomIn = () => {
@@ -40,7 +67,6 @@ const Canvas: React.FC = () => {
     setZoom(newZoom);
   };
   
-  // Handle canvas panning
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) { // Left mouse button
       setIsDragging(true);
@@ -61,12 +87,23 @@ const Canvas: React.FC = () => {
     setIsDragging(false);
   };
   
-  // Wall click handler
   const handleWallClick = (wallId: string) => {
     setSelectedWall(selectedWall === wallId ? null : wallId);
+    
+    if (elevationMode) {
+      console.log(`Viewing elevation for Wall ${wallId}`);
+    }
   };
   
-  // Render walls
+  const toggleElevationMode = (wallId: string | null) => {
+    if (elevationMode && selectedWall === wallId) {
+      setElevationMode(false);
+    } else {
+      setElevationMode(true);
+      setSelectedWall(wallId);
+    }
+  };
+  
   const renderWalls = () => {
     if (!room) return null;
     
@@ -76,27 +113,22 @@ const Canvas: React.FC = () => {
       const endX = mmToPixels(wall.end.x, zoom);
       const endY = mmToPixels(wall.end.y, zoom);
       
-      // Calculate wall length for display
       const wallLengthMm = Math.sqrt(
         Math.pow(wall.end.x - wall.start.x, 2) + 
         Math.pow(wall.end.y - wall.start.y, 2)
       );
       
-      // Calculate midpoint for wall label
       const midpoint = calculateMidpoint(
         { x: startX, y: startY },
         { x: endX, y: endY }
       );
       
-      // Calculate label offset for perpendicular display
       const angle = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI);
       const isVertical = Math.abs(angle) === 90 || Math.abs(angle) === 270;
       
-      // Wall label offset (perpendicular to wall)
       const labelOffsetX = isVertical ? -20 : 0;
       const labelOffsetY = isVertical ? 0 : -20;
       
-      // Wall dimension offset
       const dimensionOffsetX = isVertical ? 0 : 0;
       const dimensionOffsetY = isVertical ? 0 : 15;
       
@@ -117,7 +149,6 @@ const Canvas: React.FC = () => {
             stroke={selectedWall === wall.id ? "#3b82f6" : "#475569"}
           />
           
-          {/* Wall label */}
           <text 
             x={midpoint.x + labelOffsetX} 
             y={midpoint.y + labelOffsetY}
@@ -129,7 +160,6 @@ const Canvas: React.FC = () => {
             Wall {wall.label}
           </text>
           
-          {/* Wall dimension */}
           <text 
             x={midpoint.x + dimensionOffsetX} 
             y={midpoint.y + dimensionOffsetY}
@@ -140,9 +170,93 @@ const Canvas: React.FC = () => {
           >
             {formatMm(wallLengthMm, wallLengthMm >= 1000)}
           </text>
+          
+          {selectedWall === wall.id && (
+            <g 
+              className="elevation-button" 
+              transform={`translate(${midpoint.x + (isVertical ? -40 : 0)}, ${midpoint.y + (isVertical ? 0 : -40)})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleElevationMode(wall.id);
+              }}
+            >
+              <circle cx="0" cy="0" r="15" fill={elevationMode ? "#3b82f6" : "#94a3b8"} />
+              <foreignObject x="-8" y="-8" width="16" height="16">
+                <Eye size={16} color="white" />
+              </foreignObject>
+            </g>
+          )}
         </g>
       );
     });
+  };
+  
+  const renderElevation = () => {
+    if (!elevationMode || !selectedWall || !room) return null;
+    
+    const wall = room.walls.find(w => w.id === selectedWall);
+    if (!wall) return null;
+    
+    const wallLengthMm = Math.sqrt(
+      Math.pow(wall.end.x - wall.start.x, 2) + 
+      Math.pow(wall.end.y - wall.start.y, 2)
+    );
+    
+    const wallWidthPx = mmToPixels(wallLengthMm, zoom);
+    const wallHeightPx = mmToPixels(room.height, zoom);
+    
+    return (
+      <g transform={`translate(${panOffset.x}px, ${panOffset.y}px)`}>
+        <rect
+          x="0"
+          y="0"
+          width={wallWidthPx}
+          height={wallHeightPx}
+          fill="#f8fafc"
+          stroke="#475569"
+          strokeWidth="2"
+        />
+        
+        <text
+          x={wallWidthPx / 2}
+          y={20}
+          textAnchor="middle"
+          fill="#475569"
+          fontSize="14"
+          fontWeight="bold"
+        >
+          Wall {wall.label} - Elevation View
+        </text>
+        
+        <text
+          x={wallWidthPx / 2}
+          y={40}
+          textAnchor="middle"
+          fill="#475569"
+          fontSize="12"
+        >
+          {formatMm(wallLengthMm, wallLengthMm >= 1000)} × {formatMm(room.height, room.height >= 1000)}
+        </text>
+        
+        <line
+          x1="0"
+          y1={wallHeightPx}
+          x2={wallWidthPx}
+          y2={wallHeightPx}
+          stroke="#64748b"
+          strokeWidth="2"
+        />
+        
+        <g
+          onClick={() => setElevationMode(false)}
+          style={{ cursor: 'pointer' }}
+          transform={`translate(${wallWidthPx - 30}, 30)`}
+        >
+          <circle cx="0" cy="0" r="15" fill="#ef4444" />
+          <text x="0" y="0" textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="12">×</text>
+        </g>
+      </g>
+    );
   };
   
   return (
@@ -171,10 +285,10 @@ const Canvas: React.FC = () => {
         onMouseLeave={handleMouseUp}
       >
         <svg width="100%" height="100%">
-          <Ruler />
-          <g transform={`translate(${30}px, ${30}px)`}> {/* Offset for rulers */}
-            <Grid />
-            {renderWalls()}
+          {!elevationMode && <Ruler />}
+          <g transform={`translate(${elevationMode ? 0 : 30}px, ${elevationMode ? 0 : 30}px)`}> 
+            {!elevationMode && <Grid />}
+            {elevationMode ? renderElevation() : renderWalls()}
           </g>
         </svg>
       </div>
