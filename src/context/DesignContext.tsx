@@ -28,9 +28,7 @@ interface DesignContextProps {
   selectedWall: string | null;
   setSelectedWall: (wallId: string | null) => void;
   isGridVisible: boolean;
-  toggleGrid: () => void;
   gridSize: number;
-  setGridSize: (size: number) => void;
   zoom: number;
   setZoom: (zoom: number) => void;
   panOffset: Point;
@@ -58,19 +56,13 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
   const [elevationMode, setElevationMode] = useState<boolean>(false);
 
-  const toggleGrid = () => {
-    setIsGridVisible(!isGridVisible);
-  };
-
   const value = {
     room,
     setRoom,
     selectedWall,
     setSelectedWall,
     isGridVisible,
-    toggleGrid,
     gridSize,
-    setGridSize,
     zoom,
     setZoom,
     panOffset,

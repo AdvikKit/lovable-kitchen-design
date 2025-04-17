@@ -1,10 +1,12 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
 import Ruler from './Ruler';
-import { ZoomIn, ZoomOut, Eye } from 'lucide-react';
+import { ZoomIn, ZoomOut, Eye, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { mmToPixels, calculateMidpoint, formatMm } from '../utils/measurements';
+import { toast } from '@/components/ui/use-toast';
 
 const Canvas: React.FC = () => {
   const { 
@@ -23,32 +25,82 @@ const Canvas: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   
-  useEffect(() => {
+  // Reset view to fit room in viewport
+  const resetView = () => {
     if (room && canvasRef.current) {
       const canvas = canvasRef.current;
       const canvasWidth = canvas.clientWidth;
       const canvasHeight = canvas.clientHeight;
       
-      const centerX = (canvasWidth / 2) - (mmToPixels(room.width, zoom) / 2);
-      const centerY = (canvasHeight / 2) - (mmToPixels(room.length, zoom) / 2);
+      // Calculate zoom to fit room with some padding
+      const roomWidthPx = mmToPixels(room.width, 1);
+      const roomLengthPx = mmToPixels(room.length, 1);
       
-      setPanOffset({ x: centerX - 30, y: centerY - 30 });
+      // Calculate zoom to fit based on shorter dimension with padding
+      const zoomX = (canvasWidth - 100) / roomWidthPx;
+      const zoomY = (canvasHeight - 100) / roomLengthPx;
+      const newZoom = Math.min(Math.min(zoomX, zoomY), 1);
+      
+      // Center the room
+      const centerX = (canvasWidth / 2) - (mmToPixels(room.width, newZoom) / 2);
+      const centerY = (canvasHeight / 2) - (mmToPixels(room.length, newZoom) / 2);
+      
+      setZoom(newZoom);
+      setPanOffset({ x: centerX, y: centerY });
+      
+      toast({
+        title: "View Reset",
+        description: "The room has been centered in the viewport.",
+      });
     }
-  }, [room, zoom]);
+  };
+  
+  // Center room when it's first created
+  useEffect(() => {
+    if (room) {
+      resetView();
+    }
+  }, [room]);
   
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.max(0.5, Math.min(5, zoom + delta));
-    
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
+    if (e.ctrlKey || e.metaKey) {
+      // Zoom with ctrl/cmd key
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      const newZoom = Math.max(0.1, Math.min(5, zoom + delta));
       
-      const newPanOffsetX = mouseX - ((mouseX - panOffset.x) * (newZoom / zoom));
-      const newPanOffsetY = mouseY - ((mouseY - panOffset.y) * (newZoom / zoom));
+      // Zoom centered on mouse position
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const newPanOffsetX = mouseX - ((mouseX - panOffset.x) * (newZoom / zoom));
+        const newPanOffsetY = mouseY - ((mouseY - panOffset.y) * (newZoom / zoom));
+        
+        setZoom(newZoom);
+        setPanOffset({ x: newPanOffsetX, y: newPanOffsetY });
+      }
+    } else {
+      // Pan with mouse wheel
+      setPanOffset({
+        x: panOffset.x - (e.deltaX * 0.5),
+        y: panOffset.y - (e.deltaY * 0.5)
+      });
+    }
+  };
+
+  const handleZoomIn = () => {
+    const newZoom = Math.min(5, zoom * 1.2);
+    
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      const newPanOffsetX = centerX - ((centerX - panOffset.x) * (newZoom / zoom));
+      const newPanOffsetY = centerY - ((centerY - panOffset.y) * (newZoom / zoom));
       
       setZoom(newZoom);
       setPanOffset({ x: newPanOffsetX, y: newPanOffsetY });
@@ -57,14 +109,22 @@ const Canvas: React.FC = () => {
     }
   };
 
-  const handleZoomIn = () => {
-    const newZoom = Math.min(5, zoom + 0.1);
-    setZoom(newZoom);
-  };
-
   const handleZoomOut = () => {
-    const newZoom = Math.max(0.5, zoom - 0.1);
-    setZoom(newZoom);
+    const newZoom = Math.max(0.1, zoom / 1.2);
+    
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      const newPanOffsetX = centerX - ((centerX - panOffset.x) * (newZoom / zoom));
+      const newPanOffsetY = centerY - ((centerY - panOffset.y) * (newZoom / zoom));
+      
+      setZoom(newZoom);
+      setPanOffset({ x: newPanOffsetX, y: newPanOffsetY });
+    } else {
+      setZoom(newZoom);
+    }
   };
   
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -261,16 +321,20 @@ const Canvas: React.FC = () => {
   
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-end p-2 bg-slate-200">
+      <div className="flex justify-end p-2 bg-slate-200 space-x-2">
         <div className="flex items-center">
-          <span className="mr-2 text-sm">Zoom: {Math.round(zoom * 100)}%</span>
+          <Button variant="outline" size="sm" onClick={resetView} className="mr-1">
+            <RotateCcw size={16} />
+            <span className="ml-1">Center</span>
+          </Button>
+          <span className="mx-2 text-sm">Zoom: {Math.round(zoom * 100)}%</span>
           <Button variant="outline" size="sm" onClick={handleZoomOut} className="mr-1">
             <ZoomOut size={16} />
-            <span className="ml-1">Zoom Out</span>
+            <span className="ml-1">-</span>
           </Button>
           <Button variant="outline" size="sm" onClick={handleZoomIn}>
             <ZoomIn size={16} />
-            <span className="ml-1">Zoom In</span>
+            <span className="ml-1">+</span>
           </Button>
         </div>
       </div>
@@ -292,6 +356,13 @@ const Canvas: React.FC = () => {
           </g>
         </svg>
       </div>
+
+      {room && (
+        <div className="absolute bottom-4 left-4 bg-white bg-opacity-70 p-2 rounded text-sm">
+          <div>Room: {room.width}mm × {room.length}mm × {room.height}mm</div>
+          <div>Tip: Hold Ctrl/Cmd while scrolling to zoom</div>
+        </div>
+      )}
     </div>
   );
 };

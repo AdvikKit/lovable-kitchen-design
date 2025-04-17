@@ -4,26 +4,28 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useDesignContext } from '../context/DesignContext';
 import RoomCreationModal from './RoomCreationModal';
+import CabinetCatalog from './CabinetCatalog';
+import { Cabinet } from '../data/cabinetCatalog';
 import { 
-  Layout, 
-  Grid3x3,
-  Ruler, 
   Home, 
   DoorClosed, 
   AppWindow, 
-  SlidersHorizontal,
+  Eye,
   Save,
   Upload,
-  Eye,
-  Box
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
-  const { room, setRoom, isGridVisible, toggleGrid, gridSize, setGridSize } = useDesignContext();
+  const { room, setRoom } = useDesignContext();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   
   const handleCreateRoom = (newRoom: any) => {
     setRoom(newRoom);
+  };
+  
+  const handleSelectCabinet = (cabinet: Cabinet) => {
+    console.log('Selected cabinet:', cabinet);
+    // We'll implement actual cabinet placement in a future update
   };
   
   return (
@@ -66,44 +68,23 @@ const Sidebar: React.FC = () => {
               <AppWindow size={18} />
               <span>Add Window</span>
             </Button>
-            
-            <Button 
-              className="w-full flex items-center justify-start text-white gap-2"
-              variant="outline"
-              disabled={!room}
-            >
-              <Box size={18} />
-              <span>Add Cabinet</span>
-            </Button>
           </div>
+          
+          <Separator className="my-2 bg-gray-600" />
+          
+          <h3 className="text-sm font-semibold uppercase text-gray-400">Cabinets</h3>
+          {room ? (
+            <CabinetCatalog onSelectCabinet={handleSelectCabinet} />
+          ) : (
+            <div className="text-sm text-gray-400 p-2">
+              Create a room to add cabinets
+            </div>
+          )}
           
           <Separator className="my-2 bg-gray-600" />
           
           <h3 className="text-sm font-semibold uppercase text-gray-400">View</h3>
           <div className="space-y-2">
-            <Button 
-              onClick={toggleGrid}
-              className="w-full flex items-center justify-start gap-2"
-              variant={isGridVisible ? "default" : "outline"}
-            >
-              <Grid3x3 size={18} />
-              <span>{isGridVisible ? "Hide Grid" : "Show Grid"}</span>
-            </Button>
-            
-            <div className="flex flex-col space-y-1">
-              <span className="text-xs text-gray-400">Grid Size</span>
-              <select 
-                value={gridSize} 
-                onChange={(e) => setGridSize(parseInt(e.target.value))}
-                className="bg-slate-700 rounded px-2 py-1 text-sm w-full"
-              >
-                <option value={50}>50mm</option>
-                <option value={100}>100mm</option>
-                <option value={250}>250mm</option>
-                <option value={500}>500mm</option>
-              </select>
-            </div>
-            
             <Button 
               className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
