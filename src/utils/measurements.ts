@@ -1,5 +1,5 @@
 
-import { Point } from '../context/DesignContext';
+import { Point, Wall, Room } from '../context/DesignContext';
 
 // Convert millimeters to pixels for rendering
 export const mmToPixels = (mm: number, zoom: number = 1): number => {
@@ -40,11 +40,11 @@ export const formatMm = (mm: number, useMeters: boolean = false): string => {
   if (useMeters && mm >= 1000) {
     return `${(mm / 1000).toFixed(1)}m`;
   }
-  return `${mm}mm`;
+  return `${Math.round(mm)}mm`;
 };
 
 // Create default room walls based on width and length
-export const createDefaultRoom = (width: number, length: number, height: number): any => {
+export const createDefaultRoom = (width: number, length: number, height: number): Room => {
   const wallThickness = 100; // 100mm wall thickness
   
   const walls = [
@@ -87,5 +87,46 @@ export const createDefaultRoom = (width: number, length: number, height: number)
     length,
     height,
     walls,
+    cabinets: []
   };
+};
+
+// Calculate wall angle in degrees
+export const calculateWallAngle = (wall: Wall): number => {
+  return Math.atan2(
+    wall.end.y - wall.start.y,
+    wall.end.x - wall.start.x
+  ) * (180 / Math.PI);
+};
+
+// Calculate wall length
+export const calculateWallLength = (wall: Wall): number => {
+  return calculateDistance(wall.start, wall.end);
+};
+
+// Check if a point is near a wall
+export const isPointNearWall = (point: Point, wall: Wall, threshold: number): boolean => {
+  const { start, end } = wall;
+  
+  // Vector from start to end
+  const line = { x: end.x - start.x, y: end.y - start.y };
+  
+  // Vector from start to point
+  const pointVec = { x: point.x - start.x, y: point.y - start.y };
+  
+  // Calculate the projection length
+  const lineLength = line.x * line.x + line.y * line.y;
+  const dotProduct = pointVec.x * line.x + pointVec.y * line.y;
+  const t = Math.max(0, Math.min(1, dotProduct / lineLength));
+  
+  // Calculate the closest point on the line
+  const closestPoint = {
+    x: start.x + t * line.x,
+    y: start.y + t * line.y
+  };
+  
+  // Calculate the distance to the closest point
+  const distance = calculateDistance(point, closestPoint);
+  
+  return distance <= threshold;
 };

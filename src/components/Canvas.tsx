@@ -1,11 +1,19 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
 import Ruler from './Ruler';
-import { ZoomIn, ZoomOut, Eye, RotateCcw, Move, Trash2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Eye, RotateCcw, Move, Trash2, Magnet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { mmToPixels, calculateMidpoint, formatMm } from '../utils/measurements';
+import { Toggle } from '@/components/ui/toggle';
+import { mmToPixels, calculateMidpoint, formatMm, pixelsToMm } from '../utils/measurements';
 import { toast } from '@/components/ui/use-toast';
+import { 
+  findNearestWall, 
+  calculateSnapPositionToWall, 
+  isPointInRoom,
+  calculateCabinetRotationFromWall
+} from '../utils/snapping';
 
 const Canvas: React.FC = () => {
   const { 
@@ -20,7 +28,10 @@ const Canvas: React.FC = () => {
     setElevationMode,
     selectedCabinet,
     setSelectedCabinet,
-    setRoom
+    setRoom,
+    isSnappingEnabled,
+    setSnappingEnabled,
+    snapThreshold
   } = useDesignContext();
   
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -165,14 +176,45 @@ const Canvas: React.FC = () => {
       });
       
       // Update cabinet position
-      const updatedCabinets = room.cabinets.map(cabinet => {
+      let updatedCabinets = room.cabinets.map(cabinet => {
         if (cabinet.id === selectedCabinet.id) {
+          const newPosition = {
+            x: cabinet.position.x + dx,
+            y: cabinet.position.y + dy
+          };
+          
+          // Check if snapping is enabled
+          if (isSnappingEnabled) {
+            // Find nearest wall for snapping
+            const nearestWall = findNearestWall(
+              { x: newPosition.x + cabinet.width/2, y: newPosition.y + cabinet.depth/2 },
+              room.walls,
+              snapThreshold
+            );
+            
+            if (nearestWall) {
+              // Snap to wall
+              const snappedPosition = calculateSnapPositionToWall(
+                { ...cabinet, position: newPosition },
+                nearestWall
+              );
+              
+              // Calculate rotation based on wall
+              const wallRotation = calculateCabinetRotationFromWall(nearestWall);
+              
+              return {
+                ...cabinet,
+                position: snappedPosition,
+                rotation: wallRotation,
+                wallId: nearestWall.id
+              };
+            }
+          }
+          
+          // No snapping, just update position
           return {
             ...cabinet,
-            position: {
-              x: cabinet.position.x + dx,
-              y: cabinet.position.y + dy
-            }
+            position: newPosition
           };
         }
         return cabinet;
@@ -245,27 +287,66 @@ const Canvas: React.FC = () => {
     });
   };
   
+  const toggleSnapping = () => {
+    setSnappingEnabled(!isSnappingEnabled);
+    toast({
+      title: isSnappingEnabled ? "Snapping Disabled" : "Snapping Enabled",
+      description: isSnappingEnabled ?
+        "Elements will move freely." :
+        "Elements will snap to walls and other elements."
+    });
+  };
+  
   const renderWalls = () => {
     if (!room) return null;
     
     return room.walls.map((wall) => {
+      // Convert wall coordinates to pixels with zoom
       const startX = mmToPixels(wall.start.x, zoom);
       const startY = mmToPixels(wall.start.y, zoom);
       const endX = mmToPixels(wall.end.x, zoom);
       const endY = mmToPixels(wall.end.y, zoom);
       
-      const wallLengthMm = Math.sqrt(
-        Math.pow(wall.end.x - wall.start.x, 2) + 
-        Math.pow(wall.end.y - wall.start.y, 2)
-      );
+      // Calculate wall direction and thickness
+      const dx = wall.end.x - wall.start.x;
+      const dy = wall.end.y - wall.start.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
       
+      // Calculate wall thickness (perpendicular to wall direction)
+      const thickness = mmToPixels(wall.thickness, zoom);
+      const perpX = -Math.sin(angle) * thickness;
+      const perpY = Math.cos(angle) * thickness;
+      
+      // Calculate wall polygon points with thickness
+      const points = [
+        { x: startX, y: startY },
+        { x: endX, y: endY },
+        { x: endX + perpX, y: endY + perpY },
+        { x: startX + perpX, y: startY + perpY }
+      ];
+      
+      const pointsString = points.map(p => `${p.x},${p.y}`).join(' ');
+      
+      // Calculate wall length for display
+      const wallLengthMm = length;
+      
+      // Calculate midpoint for labels
       const midpoint = calculateMidpoint(
         { x: startX, y: startY },
         { x: endX, y: endY }
       );
       
-      const angle = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI);
-      const isVertical = Math.abs(angle) === 90 || Math.abs(angle) === 270;
+      const midpointOuter = calculateMidpoint(
+        { x: startX + perpX, y: startY + perpY },
+        { x: endX + perpX, y: endY + perpY }
+      );
+      
+      const labelMidpoint = calculateMidpoint(midpoint, midpointOuter);
+      
+      // Determine wall orientation for label placement
+      const angle_deg = angle * (180 / Math.PI);
+      const isVertical = Math.abs(Math.abs(angle_deg) - 90) < 45;
       
       const labelOffsetX = isVertical ? -20 : 0;
       const labelOffsetY = isVertical ? 0 : -20;
@@ -280,38 +361,39 @@ const Canvas: React.FC = () => {
           onClick={() => handleWallClick(wall.id)}
           style={{ cursor: 'pointer' }}
         >
-          <line 
-            x1={startX} 
-            y1={startY} 
-            x2={endX} 
-            y2={endY}
-            className={selectedWall === wall.id ? "kitchen-wall-selected" : "kitchen-wall"}
-            strokeWidth="2"
+          {/* Wall polygon with thickness */}
+          <polygon 
+            points={pointsString} 
+            fill={selectedWall === wall.id ? "#C5DCFF" : "#E2E8F0"}
             stroke={selectedWall === wall.id ? "#3b82f6" : "#475569"}
+            strokeWidth="1"
           />
           
+          {/* Wall label */}
           <text 
-            x={midpoint.x + labelOffsetX} 
-            y={midpoint.y + labelOffsetY}
+            x={labelMidpoint.x + labelOffsetX} 
+            y={labelMidpoint.y + labelOffsetY}
             className="kitchen-wall-label"
             fill="#475569"
             fontSize="12"
-            transform={isVertical ? `rotate(90,${midpoint.x},${midpoint.y})` : ''}
+            transform={isVertical ? `rotate(90,${labelMidpoint.x},${labelMidpoint.y})` : ''}
           >
             Wall {wall.label}
           </text>
           
+          {/* Wall dimension */}
           <text 
-            x={midpoint.x + dimensionOffsetX} 
-            y={midpoint.y + dimensionOffsetY}
+            x={labelMidpoint.x + dimensionOffsetX} 
+            y={labelMidpoint.y + dimensionOffsetY}
             className="kitchen-wall-dimension"
             fill="#475569"
             fontSize="10"
-            transform={isVertical ? `rotate(90,${midpoint.x},${midpoint.y})` : ''}
+            transform={isVertical ? `rotate(90,${labelMidpoint.x},${labelMidpoint.y})` : ''}
           >
             {formatMm(wallLengthMm, wallLengthMm >= 1000)}
           </text>
           
+          {/* Elevation button for selected wall */}
           {selectedWall === wall.id && (
             <g 
               className="elevation-button" 
@@ -578,7 +660,18 @@ const Canvas: React.FC = () => {
   
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-end p-2 bg-slate-200 space-x-2">
+      <div className="flex justify-between p-2 bg-slate-200 items-center">
+        <div>
+          <Toggle
+            pressed={isSnappingEnabled}
+            onPressedChange={toggleSnapping}
+            aria-label="Toggle snapping"
+            className="mr-2"
+          >
+            <Magnet size={16} className="mr-1" />
+            Snap
+          </Toggle>
+        </div>
         <div className="flex items-center">
           <Button variant="outline" size="sm" onClick={resetView} className="mr-1">
             <RotateCcw size={16} />

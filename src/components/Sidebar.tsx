@@ -6,6 +6,7 @@ import { useDesignContext } from '../context/DesignContext';
 import RoomCreationModal from './RoomCreationModal';
 import CabinetCatalog from './CabinetCatalog';
 import { Cabinet } from '../data/cabinetCatalog';
+import { toast } from '@/components/ui/use-toast';
 import { 
   Home, 
   DoorClosed, 
@@ -13,6 +14,7 @@ import {
   Eye,
   Save,
   Upload,
+  Magnet,
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
@@ -20,7 +22,9 @@ const Sidebar: React.FC = () => {
     room, 
     setRoom,
     elevationMode,
-    setElevationMode
+    setElevationMode,
+    isSnappingEnabled,
+    setSnappingEnabled
   } = useDesignContext();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   
@@ -29,6 +33,11 @@ const Sidebar: React.FC = () => {
     setRoom({
       ...newRoom,
       cabinets: newRoom.cabinets || []
+    });
+    
+    toast({
+      title: "Room Created",
+      description: "Your room has been created. Now you can add cabinets and other elements."
     });
   };
   
@@ -39,6 +48,16 @@ const Sidebar: React.FC = () => {
   
   const handle3DView = () => {
     setElevationMode(!elevationMode);
+  };
+  
+  const toggleSnapping = () => {
+    setSnappingEnabled(!isSnappingEnabled);
+    toast({
+      title: isSnappingEnabled ? "Snapping Disabled" : "Snapping Enabled",
+      description: isSnappingEnabled ?
+        "Elements will move freely." :
+        "Elements will snap to walls and other elements."
+    });
   };
   
   return (
@@ -80,6 +99,16 @@ const Sidebar: React.FC = () => {
             >
               <AppWindow size={18} />
               <span>Add Window</span>
+            </Button>
+            
+            <Button
+              className="w-full flex items-center justify-start text-white gap-2"
+              variant={isSnappingEnabled ? "default" : "outline"}
+              onClick={toggleSnapping}
+              disabled={!room}
+            >
+              <Magnet size={18} />
+              <span>Snap to Walls</span>
             </Button>
           </div>
           

@@ -53,6 +53,9 @@ interface DesignContextProps {
   setSelectedCabinet: (cabinet: Cabinet | null) => void;
   customizingCabinet: boolean;
   setCustomizingCabinet: (customizing: boolean) => void;
+  isSnappingEnabled: boolean;
+  setSnappingEnabled: (enabled: boolean) => void;
+  snapThreshold: number;
 }
 
 const DesignContext = createContext<DesignContextProps | undefined>(undefined);
@@ -75,6 +78,8 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
   const [elevationMode, setElevationMode] = useState<boolean>(false);
   const [selectedCabinet, setSelectedCabinet] = useState<Cabinet | null>(null);
   const [customizingCabinet, setCustomizingCabinet] = useState<boolean>(false);
+  const [isSnappingEnabled, setSnappingEnabled] = useState<boolean>(true);
+  const [snapThreshold, setSnapThreshold] = useState<number>(20); // 20mm snap threshold
 
   const value = {
     room,
@@ -93,6 +98,9 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
     setSelectedCabinet,
     customizingCabinet,
     setCustomizingCabinet,
+    isSnappingEnabled,
+    setSnappingEnabled,
+    snapThreshold,
   };
 
   return <DesignContext.Provider value={value}>{children}</DesignContext.Provider>;
