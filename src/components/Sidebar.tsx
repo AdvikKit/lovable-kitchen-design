@@ -10,22 +10,18 @@ import CabinetCustomizationModal from './CabinetCustomizationModal';
 import { 
   ChevronDown, 
   ChevronUp, 
-  Maximize2, 
-  Move, 
-  Plus, 
-  Settings, 
   DoorClosed, 
   Wind,
   Eye, 
-  LayoutGrid
+  LayoutGrid,
+  Settings
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isCabinetCatalogOpen, setIsCabinetCatalogOpen] = useState(false);
-  const [isCabinetCustomizationOpen, setIsCabinetCustomizationOpen] = useState(false);
   const [isCabinetCatalogCollapsed, setIsCabinetCatalogCollapsed] = useState(false);
-  const { selectedCabinet, customizingCabinet, setDraggingItem } = useDesignContext();
+  const { selectedCabinet, customizingCabinet, setCustomizingCabinet, setDraggingItem } = useDesignContext();
   
   const toggleCabinetCatalog = () => {
     setIsCabinetCatalogCollapsed(!isCabinetCatalogCollapsed);
@@ -58,7 +54,7 @@ const Sidebar: React.FC = () => {
     <div className="w-64 flex-shrink-0 border-r bg-secondary/50 flex flex-col">
       <div className="p-4">
         <Button variant="outline" className="w-full justify-start" onClick={() => setIsRoomModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+          <span className="mr-2 h-4 w-4 flex items-center justify-center">+</span>
           Create Room
         </Button>
       </div>
@@ -163,7 +159,7 @@ const Sidebar: React.FC = () => {
       </ScrollArea>
       
       <RoomCreationModal isOpen={isRoomModalOpen} onOpenChange={setIsRoomModalOpen} />
-      {selectedCabinet && <CabinetCustomizationModal isOpen={customizingCabinet} onOpenChange={() => {}} />}
+      {selectedCabinet && customizingCabinet && <CabinetCustomizationModal />}
     </div>
   );
 };
