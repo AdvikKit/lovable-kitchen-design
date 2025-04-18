@@ -17,6 +17,21 @@ import {
   Magnet,
 } from 'lucide-react';
 
+// Default door and window dimensions
+const DEFAULT_DOOR = {
+  width: 900,
+  height: 2100,
+  position: { x: 0, y: 0 },
+  rotation: 0,
+  isOpen: false
+};
+
+const DEFAULT_WINDOW = {
+  width: 1200,
+  height: 1000,
+  position: { x: 0, y: 1000 } // Positioned 1m from the floor
+};
+
 const Sidebar: React.FC = () => {
   const { 
     room, 
@@ -24,15 +39,18 @@ const Sidebar: React.FC = () => {
     elevationMode,
     setElevationMode,
     isSnappingEnabled,
-    setSnappingEnabled
+    setSnappingEnabled,
+    setDraggingItem
   } = useDesignContext();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   
   const handleCreateRoom = (newRoom: any) => {
-    // Initialize room with empty cabinets array if not present
+    // Initialize room with empty cabinets, doors, and windows arrays
     setRoom({
       ...newRoom,
-      cabinets: newRoom.cabinets || []
+      cabinets: newRoom.cabinets || [],
+      doors: newRoom.doors || [],
+      windows: newRoom.windows || []
     });
     
     toast({
@@ -57,6 +75,48 @@ const Sidebar: React.FC = () => {
       description: isSnappingEnabled ?
         "Elements will move freely." :
         "Elements will snap to walls and other elements."
+    });
+  };
+  
+  const startDragDoor = () => {
+    if (!room) {
+      toast({
+        title: "Create Room First",
+        description: "You need to create a room before adding doors.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setDraggingItem({
+      type: 'door',
+      item: DEFAULT_DOOR
+    });
+    
+    toast({
+      title: "Adding Door",
+      description: "Drag and drop the door onto a wall."
+    });
+  };
+  
+  const startDragWindow = () => {
+    if (!room) {
+      toast({
+        title: "Create Room First",
+        description: "You need to create a room before adding windows.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setDraggingItem({
+      type: 'window',
+      item: DEFAULT_WINDOW
+    });
+    
+    toast({
+      title: "Adding Window",
+      description: "Drag and drop the window onto a wall."
     });
   };
   
@@ -87,6 +147,7 @@ const Sidebar: React.FC = () => {
               className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
+              onMouseDown={startDragDoor}
             >
               <DoorClosed size={18} />
               <span>Add Door</span>
@@ -96,6 +157,7 @@ const Sidebar: React.FC = () => {
               className="w-full flex items-center justify-start text-white gap-2"
               variant="outline"
               disabled={!room}
+              onMouseDown={startDragWindow}
             >
               <AppWindow size={18} />
               <span>Add Window</span>

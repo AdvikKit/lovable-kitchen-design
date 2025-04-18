@@ -6,14 +6,25 @@ import Ruler from './Ruler';
 import { ZoomIn, ZoomOut, Eye, RotateCcw, Move, Trash2, Magnet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
-import { mmToPixels, calculateMidpoint, formatMm, pixelsToMm } from '../utils/measurements';
+import { 
+  mmToPixels, 
+  calculateMidpoint, 
+  formatMm, 
+  pixelsToMm, 
+  screenToRoomCoordinates,
+  roomToScreenCoordinates
+} from '../utils/measurements';
 import { toast } from '@/components/ui/use-toast';
 import { 
   findNearestWall, 
   calculateSnapPositionToWall, 
   isPointInRoom,
-  calculateCabinetRotationFromWall
+  calculateCabinetRotationFromWall,
+  calculateDoorSnapPositionToWall,
+  calculateWindowSnapPositionToWall,
+  calculateWallItemRotation
 } from '../utils/snapping';
+import { v4 as uuidv4 } from 'uuid';
 
 const Canvas: React.FC = () => {
   const { 
@@ -31,7 +42,9 @@ const Canvas: React.FC = () => {
     setRoom,
     isSnappingEnabled,
     setSnappingEnabled,
-    snapThreshold
+    snapThreshold,
+    draggingItem,
+    setDraggingItem
   } = useDesignContext();
   
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -150,6 +163,9 @@ const Canvas: React.FC = () => {
           x: e.clientX,
           y: e.clientY
         });
+      } else if (draggingItem) {
+        // Handle dropping the dragged item
+        handleItemDrop(e);
       } else {
         // Normal canvas dragging
         setIsDragging(true);
@@ -159,7 +175,7 @@ const Canvas: React.FC = () => {
   };
   
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging && !isMovingCabinet) {
+    if (isDragging && !isMovingCabinet && !draggingItem) {
       // Pan canvas
       setPanOffset({
         x: e.clientX - startPan.x,
@@ -167,8 +183,8 @@ const Canvas: React.FC = () => {
       });
     } else if (isMovingCabinet && selectedCabinet && room) {
       // Move selected cabinet
-      const dx = (e.clientX - cabinetStartPos.x) / zoom; // Convert to mm
-      const dy = (e.clientY - cabinetStartPos.y) / zoom;
+      const dx = pixelsToMm(e.clientX - cabinetStartPos.x, zoom);
+      const dy = pixelsToMm(e.clientY - cabinetStartPos.y, zoom);
       
       setCabinetStartPos({
         x: e.clientX,
@@ -214,7 +230,8 @@ const Canvas: React.FC = () => {
           // No snapping, just update position
           return {
             ...cabinet,
-            position: newPosition
+            position: newPosition,
+            wallId: null
           };
         }
         return cabinet;
@@ -224,11 +241,177 @@ const Canvas: React.FC = () => {
         ...room,
         cabinets: updatedCabinets
       });
+    } else if (draggingItem && room) {
+      // Update the draggingItem's preview position as the mouse moves
+      // This is just visual feedback, actual placement happens on mouse up
+      // We don't need to do anything here as the item will follow the cursor
     }
   };
   
   const handleMouseUp = () => {
     setIsDragging(false);
+  };
+
+  // Handle dropping a dragged item from the sidebar
+  const handleItemDrop = (e: React.MouseEvent) => {
+    if (!room || !draggingItem) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    // Convert screen coordinates to room coordinates
+    const mouseX = e.clientX - rect.left - 30; // Adjust for rulers
+    const mouseY = e.clientY - rect.top - 30;
+    
+    const roomCoords = screenToRoomCoordinates(mouseX, mouseY, panOffset, zoom);
+    
+    if (!isPointInRoom(roomCoords, room)) {
+      toast({
+        title: "Invalid Placement",
+        description: "Items must be placed inside the room.",
+        variant: "destructive"
+      });
+      setDraggingItem(null);
+      return;
+    }
+
+    if (draggingItem.type === 'cabinet') {
+      const cabinet = draggingItem.item;
+      
+      // Find nearest wall for snapping if enabled
+      let finalPosition = { x: roomCoords.x, y: roomCoords.y };
+      let wallId = null;
+      let rotation = 0;
+      
+      if (isSnappingEnabled) {
+        const nearestWall = findNearestWall(
+          { x: roomCoords.x + cabinet.width/2, y: roomCoords.y + cabinet.depth/2 },
+          room.walls,
+          snapThreshold
+        );
+        
+        if (nearestWall) {
+          finalPosition = calculateSnapPositionToWall(
+            { ...cabinet, position: roomCoords },
+            nearestWall
+          );
+          wallId = nearestWall.id;
+          rotation = calculateCabinetRotationFromWall(nearestWall);
+        }
+      }
+      
+      // Create new cabinet
+      const newCabinet = {
+        id: uuidv4(),
+        ...cabinet,
+        position: finalPosition,
+        rotation: rotation,
+        wallId: wallId
+      };
+      
+      // Add to room
+      setRoom({
+        ...room,
+        cabinets: [...room.cabinets, newCabinet]
+      });
+      
+      toast({
+        title: "Cabinet Added",
+        description: `${cabinet.name} has been added to your design.`
+      });
+    } 
+    else if (draggingItem.type === 'door') {
+      // Doors must be placed on a wall
+      const door = draggingItem.item;
+      
+      // Find nearest wall for door placement
+      const nearestWall = findNearestWall(
+        roomCoords,
+        room.walls,
+        snapThreshold
+      );
+      
+      if (!nearestWall) {
+        toast({
+          title: "Invalid Placement",
+          description: "Doors must be placed on a wall.",
+          variant: "destructive"
+        });
+        setDraggingItem(null);
+        return;
+      }
+      
+      // Calculate door position on wall
+      const doorPosition = calculateDoorSnapPositionToWall(door, nearestWall);
+      const doorRotation = calculateWallItemRotation(nearestWall);
+      
+      // Create new door
+      const newDoor = {
+        id: uuidv4(),
+        ...door,
+        position: doorPosition,
+        rotation: doorRotation,
+        wallId: nearestWall.id,
+        isOpen: false
+      };
+      
+      // Add to room
+      setRoom({
+        ...room,
+        doors: [...(room.doors || []), newDoor]
+      });
+      
+      toast({
+        title: "Door Added",
+        description: `A door has been added to your design.`
+      });
+    }
+    else if (draggingItem.type === 'window') {
+      // Windows must be placed on a wall
+      const window = draggingItem.item;
+      
+      // Find nearest wall for window placement
+      const nearestWall = findNearestWall(
+        roomCoords,
+        room.walls,
+        snapThreshold
+      );
+      
+      if (!nearestWall) {
+        toast({
+          title: "Invalid Placement",
+          description: "Windows must be placed on a wall.",
+          variant: "destructive"
+        });
+        setDraggingItem(null);
+        return;
+      }
+      
+      // Calculate window position on wall
+      const windowPosition = calculateWindowSnapPositionToWall(window, nearestWall);
+      
+      // Create new window
+      const newWindow = {
+        id: uuidv4(),
+        ...window,
+        position: windowPosition,
+        wallId: nearestWall.id
+      };
+      
+      // Add to room
+      setRoom({
+        ...room,
+        windows: [...(room.windows || []), newWindow]
+      });
+      
+      toast({
+        title: "Window Added",
+        description: `A window has been added to your design.`
+      });
+    }
+    
+    // Clear dragging item
+    setDraggingItem(null);
   };
   
   const handleWallClick = (wallId: string) => {
@@ -295,6 +478,51 @@ const Canvas: React.FC = () => {
         "Elements will move freely." :
         "Elements will snap to walls and other elements."
     });
+  };
+
+  // Render dragging item preview (follows the mouse)
+  const renderDraggingItem = () => {
+    if (!draggingItem || !canvasRef.current) return null;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = window.mouseX - rect.left;
+    const mouseY = window.mouseY - rect.top;
+    
+    if (draggingItem.type === 'cabinet') {
+      const cabinet = draggingItem.item;
+      const width = mmToPixels(cabinet.width, zoom);
+      const height = mmToPixels(cabinet.depth, zoom);
+      
+      return (
+        <g 
+          transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
+          opacity="0.5"
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill="#94a3b8"
+            stroke="#475569"
+            strokeWidth="1"
+            strokeDasharray="4,4"
+          />
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize="12"
+          >
+            {cabinet.name}
+          </text>
+        </g>
+      );
+    }
+    
+    return null;
   };
   
   const renderWalls = () => {
@@ -517,6 +745,114 @@ const Canvas: React.FC = () => {
       );
     });
   };
+
+  // Render doors in top view
+  const renderDoors = () => {
+    if (!room || !room.doors || room.doors.length === 0 || elevationMode) return null;
+    
+    return room.doors.map((door) => {
+      const x = mmToPixels(door.position.x, zoom);
+      const y = mmToPixels(door.position.y, zoom);
+      const width = mmToPixels(door.width, zoom);
+      const height = mmToPixels(door.height, zoom);
+      
+      return (
+        <g 
+          key={door.id} 
+          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px) rotate(${door.rotation}, ${width/2}, ${height/2})`}
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill="#cbd5e1"
+            stroke="#475569"
+            strokeWidth="2"
+          />
+          
+          {/* Door swing arc */}
+          <path 
+            d={`M ${width} ${height/2} A ${width} ${width} 0 0 ${door.isOpen ? 1 : 0} ${width} ${height/2 + width}`}
+            fill="none"
+            stroke="#475569"
+            strokeWidth="1"
+            strokeDasharray="5,5"
+          />
+          
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize={Math.max(8, 12 * zoom)}
+          >
+            Door
+          </text>
+        </g>
+      );
+    });
+  };
+
+  // Render windows in top view
+  const renderWindows = () => {
+    if (!room || !room.windows || room.windows.length === 0 || elevationMode) return null;
+    
+    return room.windows.map((window) => {
+      const x = mmToPixels(window.position.x, zoom);
+      const y = mmToPixels(window.position.y, zoom);
+      const width = mmToPixels(window.width, zoom);
+      const height = mmToPixels(window.height, zoom);
+      
+      return (
+        <g 
+          key={window.id} 
+          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px)`}
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill="#bfdbfe"
+            stroke="#475569"
+            strokeWidth="2"
+          />
+          
+          {/* Window panes */}
+          <line 
+            x1={width/2} 
+            y1="0" 
+            x2={width/2} 
+            y2={height} 
+            stroke="#475569" 
+            strokeWidth="1" 
+          />
+          
+          <line 
+            x1="0" 
+            y1={height/2} 
+            x2={width} 
+            y2={height/2} 
+            stroke="#475569" 
+            strokeWidth="1" 
+          />
+          
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize={Math.max(8, 12 * zoom)}
+          >
+            Window
+          </text>
+        </g>
+      );
+    });
+  };
   
   const renderElevationCabinets = () => {
     if (!elevationMode || !selectedWall || !room || !room.cabinets || room.cabinets.length === 0) return null;
@@ -587,6 +923,119 @@ const Canvas: React.FC = () => {
       );
     });
   };
+
+  // Render doors in elevation view
+  const renderElevationDoors = () => {
+    if (!elevationMode || !selectedWall || !room || !room.doors) return null;
+    
+    // Filter doors assigned to the selected wall
+    const wallDoors = room.doors.filter(door => door.wallId === selectedWall);
+    
+    return wallDoors.map((door) => {
+      const x = mmToPixels(door.position.x, zoom);
+      const y = mmToPixels(room.height - door.height, zoom); // Doors typically go to the floor
+      const width = mmToPixels(door.width, zoom);
+      const height = mmToPixels(door.height, zoom);
+      
+      return (
+        <g 
+          key={door.id} 
+          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px)`}
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill="#cbd5e1"
+            stroke="#475569"
+            strokeWidth="2"
+          />
+          
+          {/* Door handle */}
+          <circle 
+            cx={width * 0.9} 
+            cy={height * 0.5} 
+            r={width * 0.03} 
+            fill="#475569"
+          />
+          
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize={Math.max(8, 12 * zoom)}
+          >
+            Door
+          </text>
+        </g>
+      );
+    });
+  };
+
+  // Render windows in elevation view
+  const renderElevationWindows = () => {
+    if (!elevationMode || !selectedWall || !room || !room.windows) return null;
+    
+    // Filter windows assigned to the selected wall
+    const wallWindows = room.windows.filter(window => window.wallId === selectedWall);
+    
+    return wallWindows.map((window) => {
+      const x = mmToPixels(window.position.x, zoom);
+      const y = mmToPixels(room.height - window.position.y - window.height, zoom);
+      const width = mmToPixels(window.width, zoom);
+      const height = mmToPixels(window.height, zoom);
+      
+      return (
+        <g 
+          key={window.id} 
+          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px)`}
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={height} 
+            fill="#bfdbfe"
+            stroke="#475569"
+            strokeWidth="2"
+          />
+          
+          {/* Window panes */}
+          <line 
+            x1={width/2} 
+            y1="0" 
+            x2={width/2} 
+            y2={height} 
+            stroke="#475569" 
+            strokeWidth="1" 
+          />
+          
+          <line 
+            x1="0" 
+            y1={height/2} 
+            x2={width} 
+            y2={height/2} 
+            stroke="#475569" 
+            strokeWidth="1" 
+          />
+          
+          <text 
+            x={width / 2} 
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize={Math.max(8, 12 * zoom)}
+          >
+            Window
+          </text>
+        </g>
+      );
+    });
+  };
   
   const renderElevation = () => {
     if (!elevationMode || !selectedWall || !room) return null;
@@ -645,6 +1094,8 @@ const Canvas: React.FC = () => {
         />
         
         {renderElevationCabinets()}
+        {renderElevationDoors()}
+        {renderElevationWindows()}
         
         <g
           onClick={() => setElevationMode(false)}
@@ -657,6 +1108,20 @@ const Canvas: React.FC = () => {
       </g>
     );
   };
+
+  // Track mouse position for drag and drop
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      window.mouseX = e.clientX;
+      window.mouseY = e.clientY;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
   
   return (
     <div className="flex flex-col h-full">
@@ -706,6 +1171,9 @@ const Canvas: React.FC = () => {
               <>
                 {renderWalls()}
                 {renderCabinets()}
+                {renderDoors()}
+                {renderWindows()}
+                {renderDraggingItem()}
               </>
             )}
           </g>
@@ -723,3 +1191,11 @@ const Canvas: React.FC = () => {
 };
 
 export default Canvas;
+
+// Add missing global type declaration for TypeScript
+declare global {
+  interface Window {
+    mouseX: number;
+    mouseY: number;
+  }
+}

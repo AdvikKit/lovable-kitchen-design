@@ -28,12 +28,32 @@ export interface Cabinet {
   color: string;
 }
 
+export interface Door {
+  id: string;
+  width: number;
+  height: number;
+  position: Point;
+  rotation: number;
+  wallId: string;
+  isOpen: boolean;
+}
+
+export interface Window {
+  id: string;
+  width: number;
+  height: number;
+  position: Point;
+  wallId: string;
+}
+
 export interface Room {
   width: number;
   length: number;
   height: number;
   walls: Wall[];
   cabinets: Cabinet[];
+  doors: Door[];
+  windows: Window[];
 }
 
 interface DesignContextProps {
@@ -56,6 +76,8 @@ interface DesignContextProps {
   isSnappingEnabled: boolean;
   setSnappingEnabled: (enabled: boolean) => void;
   snapThreshold: number;
+  draggingItem: { type: 'cabinet' | 'door' | 'window', item: any } | null;
+  setDraggingItem: (item: { type: 'cabinet' | 'door' | 'window', item: any } | null) => void;
 }
 
 const DesignContext = createContext<DesignContextProps | undefined>(undefined);
@@ -80,6 +102,7 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
   const [customizingCabinet, setCustomizingCabinet] = useState<boolean>(false);
   const [isSnappingEnabled, setSnappingEnabled] = useState<boolean>(true);
   const [snapThreshold, setSnapThreshold] = useState<number>(20); // 20mm snap threshold
+  const [draggingItem, setDraggingItem] = useState<{ type: 'cabinet' | 'door' | 'window', item: any } | null>(null);
 
   const value = {
     room,
@@ -101,6 +124,8 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
     isSnappingEnabled,
     setSnappingEnabled,
     snapThreshold,
+    draggingItem,
+    setDraggingItem
   };
 
   return <DesignContext.Provider value={value}>{children}</DesignContext.Provider>;

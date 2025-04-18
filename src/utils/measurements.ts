@@ -87,7 +87,9 @@ export const createDefaultRoom = (width: number, length: number, height: number)
     length,
     height,
     walls,
-    cabinets: []
+    cabinets: [],
+    doors: [],
+    windows: []
   };
 };
 
@@ -129,4 +131,40 @@ export const isPointNearWall = (point: Point, wall: Wall, threshold: number): bo
   const distance = calculateDistance(point, closestPoint);
   
   return distance <= threshold;
+};
+
+// Convert point from screen coordinates to room coordinates
+export const screenToRoomCoordinates = (
+  screenX: number, 
+  screenY: number,
+  panOffset: Point,
+  zoom: number
+): Point => {
+  // First, adjust for the pan offset (subtract because we're going from screen to model)
+  const panAdjustedX = screenX - panOffset.x;
+  const panAdjustedY = screenY - panOffset.y;
+  
+  // Then convert from pixels to millimeters, accounting for zoom
+  const mmX = pixelsToMm(panAdjustedX, zoom);
+  const mmY = pixelsToMm(panAdjustedY, zoom);
+  
+  return { x: mmX, y: mmY };
+};
+
+// Convert point from room coordinates to screen coordinates
+export const roomToScreenCoordinates = (
+  roomX: number,
+  roomY: number,
+  panOffset: Point,
+  zoom: number
+): Point => {
+  // First convert from millimeters to pixels, accounting for zoom
+  const pixelX = mmToPixels(roomX, zoom);
+  const pixelY = mmToPixels(roomY, zoom);
+  
+  // Then adjust for the pan offset
+  const screenX = pixelX + panOffset.x;
+  const screenY = pixelY + panOffset.y;
+  
+  return { x: screenX, y: screenY };
 };
