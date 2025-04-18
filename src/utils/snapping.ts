@@ -56,18 +56,16 @@ export const calculateSnapPositionToWall = (cabinet: Cabinet, wall: Wall): Point
     y: -Math.cos(angle)
   };
   
-  // Calculate distance from cabinet center to the wall
-  const cabinetCenter = {
+  // Project the cabinet center onto the wall line
+  const closestPoint = getPointOnWall({
     x: cabinet.position.x + cabinet.width / 2,
     y: cabinet.position.y + cabinet.depth / 2
-  };
+  }, wall);
   
   // Calculate offset from the wall (half of wall thickness + half of cabinet depth)
   const offset = (wall.thickness / 2) + (cabinet.depth / 2);
   
   // Calculate the snapped position
-  const closestPoint = getPointOnWall(cabinetCenter, wall);
-  
   return {
     x: closestPoint.x + wallNormal.x * offset - cabinet.width / 2,
     y: closestPoint.y + wallNormal.y * offset - cabinet.depth / 2
@@ -78,52 +76,37 @@ export const calculateSnapPositionToWall = (cabinet: Cabinet, wall: Wall): Point
 export const calculateDoorSnapPositionToWall = (door: Door, wall: Wall): Point => {
   const { start, end } = wall;
   
-  // Calculate the wall angle
+  // Get the point on the wall
+  const wallPoint = getPointOnWall({
+    x: door.position.x + door.width / 2,
+    y: door.position.y + door.height / 2
+  }, wall);
+  
+  // Calculate wall angle
   const angle = Math.atan2(end.y - start.y, end.x - start.x);
   
-  // Get the wall length
-  const wallLength = calculateDistance(start, end);
-  
-  // Place door midway along the wall if it fits
-  const doorPosition = {
-    x: start.x + (end.x - start.x) * 0.5 - door.width / 2,
-    y: start.y + (end.y - start.y) * 0.5 - door.height / 2,
+  // Door should be centered on the wall
+  return {
+    x: wallPoint.x - door.width / 2,
+    y: wallPoint.y - door.height / 2
   };
-  
-  // Ensure door fits on the wall
-  if (door.width > wallLength) {
-    // If it doesn't fit, place at the start
-    doorPosition.x = start.x;
-    doorPosition.y = start.y;
-  }
-  
-  return doorPosition;
 };
 
 // Calculate snap position along a wall for windows
 export const calculateWindowSnapPositionToWall = (window: Window, wall: Wall): Point => {
   const { start, end } = wall;
   
-  // Calculate the wall angle
-  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  // Get the point on the wall
+  const wallPoint = getPointOnWall({
+    x: window.position.x + window.width / 2,
+    y: window.position.y + window.height / 2
+  }, wall);
   
-  // Get the wall length
-  const wallLength = calculateDistance(start, end);
-  
-  // Place window midway along the wall if it fits
-  const windowPosition = {
-    x: start.x + (end.x - start.x) * 0.5 - window.width / 2,
-    y: start.y + (end.y - start.y) * 0.5 - window.height / 2,
+  // Windows should be centered on the wall
+  return {
+    x: wallPoint.x - window.width / 2,
+    y: wallPoint.y - window.height / 2
   };
-  
-  // Ensure window fits on the wall
-  if (window.width > wallLength) {
-    // If it doesn't fit, adjust to fit
-    windowPosition.x = start.x;
-    windowPosition.y = start.y;
-  }
-  
-  return windowPosition;
 };
 
 // Find the closest point on a wall to another point
@@ -202,4 +185,36 @@ export const cabinetsCollide = (cabinet1: Cabinet, cabinet2: Cabinet): boolean =
     cabinet1.position.y + cabinet1.depth < cabinet2.position.y ||
     cabinet1.position.y > cabinet2.position.y + cabinet2.depth
   );
+};
+
+// Calculate position for a wall item (door/window) that ensures it's on the wall
+export const calculateWallItemPlacement = (
+  item: { width: number; height: number; position: Point },
+  wall: Wall
+): Point => {
+  // Get point on wall
+  const wallPoint = getPointOnWall(
+    { x: item.position.x + item.width/2, y: item.position.y + item.height/2 }, 
+    wall
+  );
+  
+  return {
+    x: wallPoint.x - item.width / 2,
+    y: wallPoint.y - item.height / 2
+  };
+};
+
+// Check if a door or window is properly placed on a wall
+export const isOnWall = (
+  item: { width: number; height: number; position: Point },
+  wall: Wall,
+  threshold: number
+): boolean => {
+  const itemCenter = {
+    x: item.position.x + item.width / 2,
+    y: item.position.y + item.height / 2
+  };
+  
+  const distance = distancePointToWall(itemCenter, wall);
+  return distance <= threshold;
 };

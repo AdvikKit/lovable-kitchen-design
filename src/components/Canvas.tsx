@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
@@ -22,7 +21,9 @@ import {
   calculateCabinetRotationFromWall,
   calculateDoorSnapPositionToWall,
   calculateWindowSnapPositionToWall,
-  calculateWallItemRotation
+  calculateWallItemRotation,
+  calculateWallItemPlacement,
+  isOnWall
 } from '../utils/snapping';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -241,10 +242,6 @@ const Canvas: React.FC = () => {
         ...room,
         cabinets: updatedCabinets
       });
-    } else if (draggingItem && room) {
-      // Update the draggingItem's preview position as the mouse moves
-      // This is just visual feedback, actual placement happens on mouse up
-      // We don't need to do anything here as the item will follow the cursor
     }
   };
   
@@ -265,17 +262,18 @@ const Canvas: React.FC = () => {
     
     const roomCoords = screenToRoomCoordinates(mouseX, mouseY, panOffset, zoom);
     
-    if (!isPointInRoom(roomCoords, room)) {
-      toast({
-        title: "Invalid Placement",
-        description: "Items must be placed inside the room.",
-        variant: "destructive"
-      });
-      setDraggingItem(null);
-      return;
-    }
-
     if (draggingItem.type === 'cabinet') {
+      // Make sure the cabinet is placed inside the room
+      if (!isPointInRoom(roomCoords, room)) {
+        toast({
+          title: "Invalid Placement",
+          description: "Cabinets must be placed inside the room.",
+          variant: "destructive"
+        });
+        setDraggingItem(null);
+        return;
+      }
+      
       const cabinet = draggingItem.item;
       
       // Find nearest wall for snapping if enabled
@@ -328,7 +326,7 @@ const Canvas: React.FC = () => {
       const nearestWall = findNearestWall(
         roomCoords,
         room.walls,
-        snapThreshold
+        snapThreshold * 2 // Increase threshold for easier placement
       );
       
       if (!nearestWall) {
@@ -341,8 +339,19 @@ const Canvas: React.FC = () => {
         return;
       }
       
+      // Check if the door can be placed on this wall
+      if (!isOnWall({...door, position: roomCoords}, nearestWall, snapThreshold * 2)) {
+        toast({
+          title: "Invalid Wall Placement",
+          description: "Doors must be placed directly on a wall.",
+          variant: "destructive"
+        });
+        setDraggingItem(null);
+        return;
+      }
+      
       // Calculate door position on wall
-      const doorPosition = calculateDoorSnapPositionToWall(door, nearestWall);
+      const doorPosition = calculateWallItemPlacement({...door, position: roomCoords}, nearestWall);
       const doorRotation = calculateWallItemRotation(nearestWall);
       
       // Create new door
@@ -374,7 +383,7 @@ const Canvas: React.FC = () => {
       const nearestWall = findNearestWall(
         roomCoords,
         room.walls,
-        snapThreshold
+        snapThreshold * 2 // Increase threshold for easier placement
       );
       
       if (!nearestWall) {
@@ -387,8 +396,19 @@ const Canvas: React.FC = () => {
         return;
       }
       
+      // Check if the window can be placed on this wall
+      if (!isOnWall({...window, position: roomCoords}, nearestWall, snapThreshold * 2)) {
+        toast({
+          title: "Invalid Wall Placement",
+          description: "Windows must be placed directly on a wall.",
+          variant: "destructive"
+        });
+        setDraggingItem(null);
+        return;
+      }
+      
       // Calculate window position on wall
-      const windowPosition = calculateWindowSnapPositionToWall(window, nearestWall);
+      const windowPosition = calculateWallItemPlacement({...window, position: roomCoords}, nearestWall);
       
       // Create new window
       const newWindow = {
@@ -416,10 +436,6 @@ const Canvas: React.FC = () => {
   
   const handleWallClick = (wallId: string) => {
     setSelectedWall(selectedWall === wallId ? null : wallId);
-    
-    if (elevationMode) {
-      console.log(`Viewing elevation for Wall ${wallId}`);
-    }
   };
   
   const toggleElevationMode = (wallId: string | null) => {
@@ -479,10 +495,18 @@ const Canvas: React.FC = () => {
         "Elements will snap to walls and other elements."
     });
   };
+  
+  const toggle3DView = () => {
+    setElevationMode(!elevationMode);
+    // If we're going to 3D view and no wall is selected, select the first wall
+    if (!elevationMode && !selectedWall && room && room.walls.length > 0) {
+      setSelectedWall(room.walls[0].id);
+    }
+  };
 
   // Render dragging item preview (follows the mouse)
   const renderDraggingItem = () => {
-    if (!draggingItem || !canvasRef.current) return null;
+    if (!draggingItem || !canvasRef.current || !window.mouseX || !window.mouseY) return null;
     
     const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = window.mouseX - rect.left;
@@ -496,7 +520,7 @@ const Canvas: React.FC = () => {
       return (
         <g 
           transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
-          opacity="0.5"
+          opacity="0.7"
         >
           <rect 
             x="0" 
@@ -520,6 +544,70 @@ const Canvas: React.FC = () => {
           </text>
         </g>
       );
+    } else if (draggingItem.type === 'door') {
+      const door = draggingItem.item;
+      const width = mmToPixels(door.width, zoom);
+      const height = mmToPixels(door.height, zoom);
+      
+      return (
+        <g 
+          transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
+          opacity="0.7"
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={10} // Thinner representation for doors in top view
+            fill="#cbd5e1"
+            stroke="#475569"
+            strokeWidth="1"
+            strokeDasharray="4,4"
+          />
+          <text 
+            x={width / 2} 
+            y={20}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize="10"
+          >
+            Door
+          </text>
+        </g>
+      );
+    } else if (draggingItem.type === 'window') {
+      const window = draggingItem.item;
+      const width = mmToPixels(window.width, zoom);
+      const height = mmToPixels(window.height, zoom);
+      
+      return (
+        <g 
+          transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
+          opacity="0.7"
+        >
+          <rect 
+            x="0" 
+            y="0" 
+            width={width} 
+            height={10} // Thinner representation for windows in top view
+            fill="#bfdbfe"
+            stroke="#475569"
+            strokeWidth="1"
+            strokeDasharray="4,4"
+          />
+          <text 
+            x={width / 2} 
+            y={20}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#1e293b"
+            fontSize="10"
+          >
+            Window
+          </text>
+        </g>
+      );
     }
     
     return null;
@@ -530,10 +618,10 @@ const Canvas: React.FC = () => {
     
     return room.walls.map((wall) => {
       // Convert wall coordinates to pixels with zoom
-      const startX = mmToPixels(wall.start.x, zoom);
-      const startY = mmToPixels(wall.start.y, zoom);
-      const endX = mmToPixels(wall.end.x, zoom);
-      const endY = mmToPixels(wall.end.y, zoom);
+      const startX = mmToPixels(wall.start.x, zoom) + panOffset.x;
+      const startY = mmToPixels(wall.start.y, zoom) + panOffset.y;
+      const endX = mmToPixels(wall.end.x, zoom) + panOffset.x;
+      const endY = mmToPixels(wall.end.y, zoom) + panOffset.y;
       
       // Calculate wall direction and thickness
       const dx = wall.end.x - wall.start.x;
@@ -584,8 +672,7 @@ const Canvas: React.FC = () => {
       
       return (
         <g 
-          key={wall.id} 
-          transform={`translate(${panOffset.x}px, ${panOffset.y}px)`}
+          key={wall.id}
           onClick={() => handleWallClick(wall.id)}
           style={{ cursor: 'pointer' }}
         >
@@ -646,8 +733,8 @@ const Canvas: React.FC = () => {
     if (!room || !room.cabinets || room.cabinets.length === 0 || elevationMode) return null;
     
     return room.cabinets.map((cabinet) => {
-      const x = mmToPixels(cabinet.position.x, zoom);
-      const y = mmToPixels(cabinet.position.y, zoom);
+      const x = mmToPixels(cabinet.position.x, zoom) + panOffset.x;
+      const y = mmToPixels(cabinet.position.y, zoom) + panOffset.y;
       const width = mmToPixels(cabinet.width, zoom);
       const height = mmToPixels(cabinet.depth, zoom); // In top view, depth is height
       const isSelected = selectedCabinet?.id === cabinet.id;
@@ -661,7 +748,7 @@ const Canvas: React.FC = () => {
       return (
         <g 
           key={cabinet.id} 
-          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px) rotate(${cabinet.rotation}, ${width/2}, ${height/2})`}
+          transform={`translate(${x}, ${y}) rotate(${cabinet.rotation}, ${width/2}, ${height/2})`}
           onClick={(e) => handleCabinetClick(e, cabinet.id)}
           style={{ cursor: isMovingCabinet && isSelected ? 'move' : 'pointer' }}
         >
@@ -751,21 +838,21 @@ const Canvas: React.FC = () => {
     if (!room || !room.doors || room.doors.length === 0 || elevationMode) return null;
     
     return room.doors.map((door) => {
-      const x = mmToPixels(door.position.x, zoom);
-      const y = mmToPixels(door.position.y, zoom);
+      const x = mmToPixels(door.position.x, zoom) + panOffset.x;
+      const y = mmToPixels(door.position.y, zoom) + panOffset.y;
       const width = mmToPixels(door.width, zoom);
-      const height = mmToPixels(door.height, zoom);
+      const thickness = mmToPixels(100, zoom); // Constant door thickness for visualization
       
       return (
         <g 
           key={door.id} 
-          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px) rotate(${door.rotation}, ${width/2}, ${height/2})`}
+          transform={`translate(${x}, ${y}) rotate(${door.rotation}, ${width/2}, ${thickness/2})`}
         >
           <rect 
             x="0" 
             y="0" 
             width={width} 
-            height={height} 
+            height={thickness} 
             fill="#cbd5e1"
             stroke="#475569"
             strokeWidth="2"
@@ -773,7 +860,7 @@ const Canvas: React.FC = () => {
           
           {/* Door swing arc */}
           <path 
-            d={`M ${width} ${height/2} A ${width} ${width} 0 0 ${door.isOpen ? 1 : 0} ${width} ${height/2 + width}`}
+            d={`M ${width} ${thickness/2} A ${width} ${width} 0 0 ${door.isOpen ? 1 : 0} ${width} ${thickness/2 + width}`}
             fill="none"
             stroke="#475569"
             strokeWidth="1"
@@ -782,7 +869,7 @@ const Canvas: React.FC = () => {
           
           <text 
             x={width / 2} 
-            y={height / 2}
+            y={thickness / 2}
             textAnchor="middle"
             dominantBaseline="middle"
             fill="#1e293b"
@@ -800,21 +887,21 @@ const Canvas: React.FC = () => {
     if (!room || !room.windows || room.windows.length === 0 || elevationMode) return null;
     
     return room.windows.map((window) => {
-      const x = mmToPixels(window.position.x, zoom);
-      const y = mmToPixels(window.position.y, zoom);
+      const x = mmToPixels(window.position.x, zoom) + panOffset.x;
+      const y = mmToPixels(window.position.y, zoom) + panOffset.y;
       const width = mmToPixels(window.width, zoom);
-      const height = mmToPixels(window.height, zoom);
+      const thickness = mmToPixels(100, zoom); // Constant window thickness for visualization
       
       return (
         <g 
           key={window.id} 
-          transform={`translate(${panOffset.x + x}px, ${panOffset.y + y}px)`}
+          transform={`translate(${x}, ${y})`}
         >
           <rect 
             x="0" 
             y="0" 
             width={width} 
-            height={height} 
+            height={thickness} 
             fill="#bfdbfe"
             stroke="#475569"
             strokeWidth="2"
@@ -825,23 +912,23 @@ const Canvas: React.FC = () => {
             x1={width/2} 
             y1="0" 
             x2={width/2} 
-            y2={height} 
+            y2={thickness} 
             stroke="#475569" 
             strokeWidth="1" 
           />
           
           <line 
             x1="0" 
-            y1={height/2} 
+            y1={thickness/2} 
             x2={width} 
-            y2={height/2} 
+            y2={thickness/2} 
             stroke="#475569" 
             strokeWidth="1" 
           />
           
           <text 
             x={width / 2} 
-            y={height / 2}
+            y={thickness / 2}
             textAnchor="middle"
             dominantBaseline="middle"
             fill="#1e293b"
@@ -1126,7 +1213,7 @@ const Canvas: React.FC = () => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex justify-between p-2 bg-slate-200 items-center">
-        <div>
+        <div className="flex items-center">
           <Toggle
             pressed={isSnappingEnabled}
             onPressedChange={toggleSnapping}
@@ -1136,6 +1223,17 @@ const Canvas: React.FC = () => {
             <Magnet size={16} className="mr-1" />
             Snap
           </Toggle>
+          
+          <Button 
+            variant={elevationMode ? "default" : "outline"} 
+            size="sm" 
+            onClick={toggle3DView}
+            disabled={!room}
+            className="mr-2"
+          >
+            <Eye size={16} className="mr-1" />
+            3D View
+          </Button>
         </div>
         <div className="flex items-center">
           <Button variant="outline" size="sm" onClick={resetView} className="mr-1">

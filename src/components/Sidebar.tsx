@@ -15,6 +15,7 @@ import {
   Save,
   Upload,
   Magnet,
+  Eye3d
 } from 'lucide-react';
 
 // Default door and window dimensions
@@ -40,7 +41,9 @@ const Sidebar: React.FC = () => {
     setElevationMode,
     isSnappingEnabled,
     setSnappingEnabled,
-    setDraggingItem
+    setDraggingItem,
+    selectedWall,
+    setSelectedWall
   } = useDesignContext();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   
@@ -65,7 +68,25 @@ const Sidebar: React.FC = () => {
   };
   
   const handle3DView = () => {
+    if (!elevationMode && !selectedWall && room && room.walls.length > 0) {
+      // If turning on 3D view and no wall is selected, select the first wall
+      setSelectedWall(room.walls[0].id);
+    }
     setElevationMode(!elevationMode);
+    
+    if (elevationMode) {
+      toast({
+        title: "2D View",
+        description: "Switched to top-down floor plan view."
+      });
+    } else {
+      toast({
+        title: "3D View",
+        description: room && selectedWall 
+          ? `Viewing wall ${room.walls.find(w => w.id === selectedWall)?.label || ''} in elevation view.`
+          : "Select a wall to view in elevation."
+      });
+    }
   };
   
   const toggleSnapping = () => {
