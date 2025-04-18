@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,8 +14,8 @@ import {
   Move, 
   Plus, 
   Settings, 
-  Door,
-  Window,
+  DoorClosed, 
+  Wind,
   Eye, 
   LayoutGrid
 } from 'lucide-react';
@@ -24,10 +25,33 @@ const Sidebar: React.FC = () => {
   const [isCabinetCatalogOpen, setIsCabinetCatalogOpen] = useState(false);
   const [isCabinetCustomizationOpen, setIsCabinetCustomizationOpen] = useState(false);
   const [isCabinetCatalogCollapsed, setIsCabinetCatalogCollapsed] = useState(false);
-  const { selectedCabinet, customizingCabinet } = useDesignContext();
+  const { selectedCabinet, customizingCabinet, setDraggingItem } = useDesignContext();
   
   const toggleCabinetCatalog = () => {
     setIsCabinetCatalogCollapsed(!isCabinetCatalogCollapsed);
+  };
+
+  const handleCabinetSelect = (cabinet) => {
+    setDraggingItem({ type: 'cabinet', item: cabinet });
+  };
+
+  const handleDoorDrag = (doorType) => {
+    const door = {
+      width: doorType === 'Single Door' ? 800 : 1200,
+      height: 2100,
+      position: { x: 0, y: 0 },
+      isOpen: false
+    };
+    setDraggingItem({ type: 'door', item: door });
+  };
+
+  const handleWindowDrag = (windowType) => {
+    const window = {
+      width: windowType === 'Standard' ? 1000 : (windowType === 'Large' ? 1500 : 2000), 
+      height: 1200,
+      position: { x: 0, y: 1000 }  // Default position at 1m from floor
+    };
+    setDraggingItem({ type: 'window', item: window });
   };
   
   return (
@@ -64,7 +88,7 @@ const Sidebar: React.FC = () => {
               </Button>
               {!isCabinetCatalogCollapsed && (
                 <div className="border-t p-2">
-                  <CabinetCatalog />
+                  <CabinetCatalog onSelectCabinet={handleCabinetSelect} />
                 </div>
               )}
             </div>
@@ -76,12 +100,23 @@ const Sidebar: React.FC = () => {
                 aria-expanded={!isCabinetCatalogCollapsed}
               >
                 <span>Doors</span>
-                <Door className="h-4 w-4" />
+                <DoorClosed className="h-4 w-4" />
               </Button>
               <div className="flex gap-2 px-2 pb-2">
-                <Button size="sm" variant="outline">Single Door</Button>
-                <Button size="sm" variant="outline">Double Door</Button>
-                <Button size="sm" variant="outline">Sliding Door</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onMouseDown={() => handleDoorDrag('Single Door')}
+                  draggable
+                  onDragStart={() => handleDoorDrag('Single Door')}
+                >Single Door</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onMouseDown={() => handleDoorDrag('Double Door')}
+                  draggable
+                  onDragStart={() => handleDoorDrag('Double Door')}
+                >Double Door</Button>
               </div>
             </div>
             
@@ -92,12 +127,30 @@ const Sidebar: React.FC = () => {
                 aria-expanded={!isCabinetCatalogCollapsed}
               >
                 <span>Windows</span>
-                <Window className="h-4 w-4" />
+                <Wind className="h-4 w-4" />
               </Button>
               <div className="flex gap-2 px-2 pb-2">
-                <Button size="sm" variant="outline">Standard</Button>
-                <Button size="sm" variant="outline">Large</Button>
-                <Button size="sm" variant="outline">Bay Window</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onMouseDown={() => handleWindowDrag('Standard')}
+                  draggable
+                  onDragStart={() => handleWindowDrag('Standard')}
+                >Standard</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onMouseDown={() => handleWindowDrag('Large')}
+                  draggable
+                  onDragStart={() => handleWindowDrag('Large')}
+                >Large</Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onMouseDown={() => handleWindowDrag('Bay Window')}
+                  draggable
+                  onDragStart={() => handleWindowDrag('Bay Window')}
+                >Bay Window</Button>
               </div>
             </div>
           </TabsContent>
@@ -109,8 +162,8 @@ const Sidebar: React.FC = () => {
         </Tabs>
       </ScrollArea>
       
-      <RoomCreationModal open={isRoomModalOpen} onOpenChange={setIsRoomModalOpen} />
-      {selectedCabinet && <CabinetCustomizationModal open={customizingCabinet} onOpenChange={() => {}} />}
+      <RoomCreationModal isOpen={isRoomModalOpen} onOpenChange={setIsRoomModalOpen} />
+      {selectedCabinet && <CabinetCustomizationModal isOpen={customizingCabinet} onOpenChange={() => {}} />}
     </div>
   );
 };
