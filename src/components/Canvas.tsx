@@ -23,7 +23,8 @@ import {
   calculateWindowSnapPositionToWall,
   calculateWallItemRotation,
   calculateWallItemPlacement,
-  isOnWall
+  isOnWall,
+  canPlaceWallItem
 } from '../utils/snapping';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -257,8 +258,8 @@ const Canvas: React.FC = () => {
     if (!rect) return;
 
     // Convert screen coordinates to room coordinates
-    const mouseX = e.clientX - rect.left - 30; // Adjust for rulers
-    const mouseY = e.clientY - rect.top - 30;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
     
     const roomCoords = screenToRoomCoordinates(mouseX, mouseY, panOffset, zoom);
     
@@ -340,10 +341,11 @@ const Canvas: React.FC = () => {
       }
       
       // Check if the door can be placed on this wall
-      if (!isOnWall({...door, position: roomCoords}, nearestWall, snapThreshold * 2)) {
+      const placement = canPlaceWallItem({...door, position: roomCoords}, nearestWall, room, snapThreshold * 2);
+      if (!placement.canPlace) {
         toast({
           title: "Invalid Wall Placement",
-          description: "Doors must be placed directly on a wall.",
+          description: placement.message || "Invalid placement.",
           variant: "destructive"
         });
         setDraggingItem(null);
@@ -397,10 +399,11 @@ const Canvas: React.FC = () => {
       }
       
       // Check if the window can be placed on this wall
-      if (!isOnWall({...window, position: roomCoords}, nearestWall, snapThreshold * 2)) {
+      const placement = canPlaceWallItem({...window, position: roomCoords}, nearestWall, room, snapThreshold * 2);
+      if (!placement.canPlace) {
         toast({
           title: "Invalid Wall Placement",
-          description: "Windows must be placed directly on a wall.",
+          description: placement.message || "Invalid placement.",
           variant: "destructive"
         });
         setDraggingItem(null);
@@ -1290,7 +1293,6 @@ const Canvas: React.FC = () => {
 
 export default Canvas;
 
-// Add missing global type declaration for TypeScript
 declare global {
   interface Window {
     mouseX: number;

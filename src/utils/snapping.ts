@@ -1,4 +1,3 @@
-
 import { Point, Wall, Cabinet, Room, Door, Window } from '../context/DesignContext';
 import { calculateDistance, pixelsToMm, calculateWallAngle } from './measurements';
 
@@ -146,7 +145,7 @@ export const calculateWallItemRotation = (wall: Wall): number => {
   return calculateWallAngle(wall);
 };
 
-// Check if a point is inside the room boundaries
+// Enhanced check for detecting if a point is inside a room
 export const isPointInRoom = (point: Point, room: Room): boolean => {
   if (!room) return false;
   
@@ -156,6 +155,50 @@ export const isPointInRoom = (point: Point, room: Room): boolean => {
     point.y >= 0 && 
     point.y <= room.length
   );
+};
+
+// Enhanced check for if an item can be placed on a wall
+export const isOnWall = (
+  item: { width: number; height: number; position: Point },
+  wall: Wall,
+  threshold: number
+): boolean => {
+  const itemCenter = {
+    x: item.position.x + item.width / 2,
+    y: item.position.y + item.height / 2
+  };
+  
+  const distance = distancePointToWall(itemCenter, wall);
+  return distance <= threshold;
+};
+
+// Calculate if a wall item (door/window) is properly placed on a wall
+export const canPlaceWallItem = (
+  item: { width: number; height: number; position: Point },
+  wall: Wall,
+  room: Room,
+  threshold: number
+): { canPlace: boolean; message?: string } => {
+  // First check if it's on a wall
+  if (!isOnWall(item, wall, threshold)) {
+    return { canPlace: false, message: "Items must be placed directly on a wall." };
+  }
+  
+  // Check if it's inside the room boundaries
+  const corners = [
+    item.position,
+    { x: item.position.x + item.width, y: item.position.y },
+    { x: item.position.x, y: item.position.y + item.height },
+    { x: item.position.x + item.width, y: item.position.y + item.height }
+  ];
+  
+  for (const corner of corners) {
+    if (!isPointInRoom(corner, room)) {
+      return { canPlace: false, message: "Items must be placed within room boundaries." };
+    }
+  }
+  
+  return { canPlace: true };
 };
 
 // Check if a cabinet can be placed at the given position
@@ -202,19 +245,4 @@ export const calculateWallItemPlacement = (
     x: wallPoint.x - item.width / 2,
     y: wallPoint.y - item.height / 2
   };
-};
-
-// Check if a door or window is properly placed on a wall
-export const isOnWall = (
-  item: { width: number; height: number; position: Point },
-  wall: Wall,
-  threshold: number
-): boolean => {
-  const itemCenter = {
-    x: item.position.x + item.width / 2,
-    y: item.position.y + item.height / 2
-  };
-  
-  const distance = distancePointToWall(itemCenter, wall);
-  return distance <= threshold;
 };
