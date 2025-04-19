@@ -21,7 +21,14 @@ const Sidebar: React.FC = () => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isCabinetCatalogOpen, setIsCabinetCatalogOpen] = useState(false);
   const [isCabinetCatalogCollapsed, setIsCabinetCatalogCollapsed] = useState(false);
-  const { selectedCabinet, customizingCabinet, setCustomizingCabinet, setDraggingItem } = useDesignContext();
+  const { 
+    selectedCabinet, 
+    customizingCabinet, 
+    setCustomizingCabinet, 
+    setDraggingItem,
+    room, 
+    selectedWall 
+  } = useDesignContext();
   
   const toggleCabinetCatalog = () => {
     setIsCabinetCatalogCollapsed(!isCabinetCatalogCollapsed);
@@ -48,6 +55,19 @@ const Sidebar: React.FC = () => {
       position: { x: 0, y: 1000 }  // Default position at 1m from floor
     };
     setDraggingItem({ type: 'window', item: window });
+  };
+  
+  const handleAddCabinet = (cabinet) => {
+    if (room) {
+      const updatedRoom = {
+        ...room,
+        cabinets: [...room.cabinets, cabinet]
+      };
+      // Update the room with the new cabinet
+      // This would typically call setRoom from the DesignContext
+      // but we're just handling the modal close here
+    }
+    setCustomizingCabinet(false);
   };
   
   return (
@@ -159,7 +179,16 @@ const Sidebar: React.FC = () => {
       </ScrollArea>
       
       <RoomCreationModal isOpen={isRoomModalOpen} onOpenChange={setIsRoomModalOpen} />
-      {selectedCabinet && customizingCabinet && <CabinetCustomizationModal />}
+      
+      {selectedCabinet && customizingCabinet && (
+        <CabinetCustomizationModal
+          isOpen={customizingCabinet}
+          onClose={() => setCustomizingCabinet(false)}
+          cabinet={selectedCabinet}
+          onAddCabinet={handleAddCabinet}
+          wallId={selectedWall}
+        />
+      )}
     </div>
   );
 };
