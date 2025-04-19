@@ -1,4 +1,3 @@
-
 import { Point, Wall, Cabinet, Door, Window, Room } from '@/context/DesignContext';
 
 export interface SnapResult {

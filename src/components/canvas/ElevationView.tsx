@@ -1,8 +1,10 @@
 
 import React from 'react';
-import { Room, Wall, Cabinet, Point } from '@/context/DesignContext';
-import { mmToPixels } from '@/utils/measurements';
-import { formatMm } from '@/utils/measurements';
+import { Room, Wall, Point } from '@/context/DesignContext';
+import { mmToPixels, formatMm } from '@/utils/measurements';
+import ElevationCabinetsRenderer from './elevation/ElevationCabinetsRenderer';
+import ElevationDoorsRenderer from './elevation/ElevationDoorsRenderer';
+import ElevationWindowsRenderer from './elevation/ElevationWindowsRenderer';
 
 interface ElevationViewProps {
   room: Room;
@@ -30,168 +32,6 @@ const ElevationView: React.FC<ElevationViewProps> = ({
   const wallWidthPx = mmToPixels(wallLengthMm, zoom);
   const wallHeightPx = mmToPixels(room.height, zoom);
   
-  // Render cabinets in elevation view
-  const renderElevationCabinets = () => {
-    const wallCabinets = room.cabinets.filter(cabinet => cabinet.wallId === selectedWall);
-    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
-    
-    return wallCabinets.map((cabinet) => {
-      const distanceAlongWall = Math.cos(wallAngle) * (cabinet.position.x - wall.start.x) +
-                               Math.sin(wallAngle) * (cabinet.position.y - wall.start.y);
-      
-      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - cabinet.height, zoom) + panOffset.y;
-      const width = mmToPixels(cabinet.width, zoom);
-      const height = mmToPixels(cabinet.height, zoom);
-      
-      let fillColor = cabinet.color;
-      if (fillColor === 'natural') fillColor = '#E3C395';
-      else if (fillColor === 'walnut') fillColor = '#5C4033';
-      else if (fillColor === 'cherry') fillColor = '#6E2E1C';
-      
-      return (
-        <g key={cabinet.id}>
-          <rect 
-            x={x}
-            y={y}
-            width={width} 
-            height={height} 
-            fill={fillColor}
-            stroke="#475569"
-            strokeWidth="1"
-          />
-          
-          <rect 
-            x={x + width * 0.45} 
-            y={y + height * 0.5} 
-            width={width * 0.1} 
-            height={height * 0.2} 
-            fill="#94a3b8"
-          />
-          
-          <text 
-            x={x + width / 2} 
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={cabinet.color === 'black' ? "white" : "black"}
-            fontSize={Math.max(8, 12 * zoom)}
-            fontWeight="bold"
-          >
-            {cabinet.name}
-          </text>
-        </g>
-      );
-    });
-  };
-
-  // Render doors in elevation view
-  const renderElevationDoors = () => {
-    const wallDoors = room.doors.filter(door => door.wallId === selectedWall);
-    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
-    
-    return wallDoors.map((door) => {
-      const distanceAlongWall = Math.cos(wallAngle) * (door.position.x - wall.start.x) +
-                               Math.sin(wallAngle) * (door.position.y - wall.start.y);
-      
-      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - door.height, zoom) + panOffset.y;
-      const width = mmToPixels(door.width, zoom);
-      const height = mmToPixels(door.height, zoom);
-      
-      return (
-        <g key={door.id}>
-          <rect 
-            x={x} 
-            y={y} 
-            width={width} 
-            height={height} 
-            fill="#cbd5e1"
-            stroke="#475569"
-            strokeWidth="2"
-          />
-          
-          <circle 
-            cx={x + width * 0.9} 
-            cy={y + height * 0.5} 
-            r={width * 0.03} 
-            fill="#475569"
-          />
-          
-          <text 
-            x={x + width / 2} 
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize={Math.max(8, 12 * zoom)}
-          >
-            Door
-          </text>
-        </g>
-      );
-    });
-  };
-
-  // Render windows in elevation view
-  const renderElevationWindows = () => {
-    const wallWindows = room.windows.filter(window => window.wallId === selectedWall);
-    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
-    
-    return wallWindows.map((window) => {
-      const distanceAlongWall = Math.cos(wallAngle) * (window.position.x - wall.start.x) +
-                               Math.sin(wallAngle) * (window.position.y - wall.start.y);
-      
-      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - window.position.y - window.height, zoom) + panOffset.y;
-      const width = mmToPixels(window.width, zoom);
-      const height = mmToPixels(window.height, zoom);
-      
-      return (
-        <g key={window.id}>
-          <rect 
-            x={x} 
-            y={y} 
-            width={width} 
-            height={height} 
-            fill="#bfdbfe"
-            stroke="#475569"
-            strokeWidth="2"
-          />
-          
-          <line 
-            x1={x + width/2} 
-            y1={y} 
-            x2={x + width/2} 
-            y2={y + height} 
-            stroke="#475569" 
-            strokeWidth="1" 
-          />
-          
-          <line 
-            x1={x} 
-            y1={y + height/2} 
-            x2={x + width} 
-            y2={y + height/2} 
-            stroke="#475569" 
-            strokeWidth="1" 
-          />
-          
-          <text 
-            x={x + width / 2} 
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize={Math.max(8, 12 * zoom)}
-          >
-            Window
-          </text>
-        </g>
-      );
-    });
-  };
-
   return (
     <>
       <rect
@@ -234,9 +74,9 @@ const ElevationView: React.FC<ElevationViewProps> = ({
         strokeWidth="2"
       />
       
-      {renderElevationCabinets()}
-      {renderElevationDoors()}
-      {renderElevationWindows()}
+      <ElevationCabinetsRenderer room={room} wall={wall} zoom={zoom} panOffset={panOffset} />
+      <ElevationDoorsRenderer room={room} wall={wall} zoom={zoom} panOffset={panOffset} />
+      <ElevationWindowsRenderer room={room} wall={wall} zoom={zoom} panOffset={panOffset} />
       
       <g
         onClick={() => setElevationMode(false)}
@@ -251,3 +91,4 @@ const ElevationView: React.FC<ElevationViewProps> = ({
 };
 
 export default ElevationView;
+
