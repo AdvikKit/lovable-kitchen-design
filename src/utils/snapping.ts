@@ -1,3 +1,4 @@
+
 import { Point, Wall, Cabinet, Room, Door, Window } from '../context/DesignContext';
 import { calculateDistance, pixelsToMm, calculateWallAngle } from './measurements';
 
@@ -40,6 +41,94 @@ export const findNearestWall = (point: Point, walls: Wall[], threshold: number):
   }
   
   return nearestWall;
+};
+
+// Find the nearest cabinet to another cabinet
+export const findNearestCabinet = (
+  cabinet: Cabinet, 
+  cabinets: Cabinet[], 
+  threshold: number,
+  excludeId?: string
+): { cabinet: Cabinet, edge: 'left' | 'right' | 'top' | 'bottom', distance: number } | null => {
+  let nearestCabinet = null;
+  let minDistance = threshold;
+  let nearestEdge: 'left' | 'right' | 'top' | 'bottom' = 'left';
+  
+  // Skip if no other cabinets
+  if (!cabinets || cabinets.length === 0) return null;
+  
+  for (const otherCabinet of cabinets) {
+    // Skip self
+    if (otherCabinet.id === (excludeId || cabinet.id)) continue;
+    
+    // Check each edge of the cabinet
+    const edges = [
+      { 
+        edge: 'left' as const,
+        distance: Math.abs((otherCabinet.position.x + otherCabinet.width) - cabinet.position.x),
+        valid: Math.abs(otherCabinet.position.y - cabinet.position.y) < threshold || 
+              Math.abs((otherCabinet.position.y + otherCabinet.depth) - (cabinet.position.y + cabinet.depth)) < threshold
+      },
+      { 
+        edge: 'right' as const,
+        distance: Math.abs(otherCabinet.position.x - (cabinet.position.x + cabinet.width)),
+        valid: Math.abs(otherCabinet.position.y - cabinet.position.y) < threshold || 
+              Math.abs((otherCabinet.position.y + otherCabinet.depth) - (cabinet.position.y + cabinet.depth)) < threshold
+      },
+      { 
+        edge: 'top' as const,
+        distance: Math.abs((otherCabinet.position.y + otherCabinet.depth) - cabinet.position.y),
+        valid: Math.abs(otherCabinet.position.x - cabinet.position.x) < threshold || 
+              Math.abs((otherCabinet.position.x + otherCabinet.width) - (cabinet.position.x + cabinet.width)) < threshold
+      },
+      { 
+        edge: 'bottom' as const,
+        distance: Math.abs(otherCabinet.position.y - (cabinet.position.y + cabinet.depth)),
+        valid: Math.abs(otherCabinet.position.x - cabinet.position.x) < threshold || 
+              Math.abs((otherCabinet.position.x + otherCabinet.width) - (cabinet.position.x + cabinet.width)) < threshold
+      }
+    ];
+    
+    for (const edge of edges) {
+      if (edge.distance < minDistance && edge.valid) {
+        minDistance = edge.distance;
+        nearestCabinet = otherCabinet;
+        nearestEdge = edge.edge;
+      }
+    }
+  }
+  
+  if (nearestCabinet) {
+    return { cabinet: nearestCabinet, edge: nearestEdge, distance: minDistance };
+  }
+  
+  return null;
+};
+
+// Calculate snap position when snapping to another cabinet
+export const calculateSnapPositionToCabinet = (
+  cabinet: Cabinet, 
+  nearestCabinet: Cabinet, 
+  edge: 'left' | 'right' | 'top' | 'bottom'
+): Point => {
+  let newPosition = { ...cabinet.position };
+  
+  switch (edge) {
+    case 'left':
+      newPosition.x = nearestCabinet.position.x + nearestCabinet.width;
+      break;
+    case 'right':
+      newPosition.x = nearestCabinet.position.x - cabinet.width;
+      break;
+    case 'top':
+      newPosition.y = nearestCabinet.position.y + nearestCabinet.depth;
+      break;
+    case 'bottom':
+      newPosition.y = nearestCabinet.position.y - cabinet.depth;
+      break;
+  }
+  
+  return newPosition;
 };
 
 // Calculate snap position along a wall for cabinets

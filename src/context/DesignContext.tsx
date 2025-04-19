@@ -76,6 +76,8 @@ interface DesignContextProps {
   isSnappingEnabled: boolean;
   setSnappingEnabled: (enabled: boolean) => void;
   snapThreshold: number;
+  snapToCabinets: boolean;
+  setSnapToCabinets: (enabled: boolean) => void;
   draggingItem: { type: 'cabinet' | 'door' | 'window', item: any } | null;
   setDraggingItem: (item: { type: 'cabinet' | 'door' | 'window', item: any } | null) => void;
 }
@@ -102,6 +104,7 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
   const [customizingCabinet, setCustomizingCabinet] = useState<boolean>(false);
   const [isSnappingEnabled, setSnappingEnabled] = useState<boolean>(true);
   const [snapThreshold, setSnapThreshold] = useState<number>(20); // 20mm snap threshold
+  const [snapToCabinets, setSnapToCabinets] = useState<boolean>(true); // New state for cabinet snapping
   const [draggingItem, setDraggingItem] = useState<{ type: 'cabinet' | 'door' | 'window', item: any } | null>(null);
 
   const value = {
@@ -124,6 +127,8 @@ export const DesignProvider = ({ children }: { children: ReactNode }) => {
     isSnappingEnabled,
     setSnappingEnabled,
     snapThreshold,
+    snapToCabinets,
+    setSnapToCabinets,
     draggingItem,
     setDraggingItem
   };

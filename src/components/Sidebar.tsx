@@ -27,7 +27,8 @@ const Sidebar: React.FC = () => {
     setCustomizingCabinet, 
     setDraggingItem,
     room, 
-    selectedWall 
+    selectedWall,
+    setRoom
   } = useDesignContext();
   
   const toggleCabinetCatalog = () => {
@@ -64,8 +65,7 @@ const Sidebar: React.FC = () => {
         cabinets: [...room.cabinets, cabinet]
       };
       // Update the room with the new cabinet
-      // This would typically call setRoom from the DesignContext
-      // but we're just handling the modal close here
+      setRoom(updatedRoom);
     }
     setCustomizingCabinet(false);
   };

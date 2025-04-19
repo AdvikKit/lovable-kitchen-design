@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
@@ -26,7 +25,9 @@ import {
   calculateWallItemPlacement,
   isOnWall,
   canPlaceWallItem,
-  distancePointToWall
+  distancePointToWall,
+  findNearestCabinet,
+  calculateSnapPositionToCabinet
 } from '../utils/snapping';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -47,6 +48,7 @@ const Canvas: React.FC = () => {
     isSnappingEnabled,
     setSnappingEnabled,
     snapThreshold,
+    snapToCabinets,
     draggingItem,
     setDraggingItem
   } = useDesignContext();
@@ -57,6 +59,7 @@ const Canvas: React.FC = () => {
   const [isMovingCabinet, setIsMovingCabinet] = useState(false);
   const [cabinetStartPos, setCabinetStartPos] = useState({ x: 0, y: 0 });
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [initialDropPosition, setInitialDropPosition] = useState<{ x: number, y: number } | null>(null);
   
   // Reset view to fit room in viewport
   const resetView = () => {
@@ -219,6 +222,31 @@ const Canvas: React.FC = () => {
           
           // Check if snapping is enabled
           if (isSnappingEnabled) {
+            // Check if snapping to other cabinets is enabled and there are other cabinets
+            if (snapToCabinets && room.cabinets.length > 1) {
+              const nearestCabinetInfo = findNearestCabinet(
+                { ...cabinet, position: newPosition },
+                room.cabinets,
+                snapThreshold,
+                cabinet.id
+              );
+              
+              if (nearestCabinetInfo) {
+                // Snap to nearest cabinet
+                const snappedPosition = calculateSnapPositionToCabinet(
+                  { ...cabinet, position: newPosition },
+                  nearestCabinetInfo.cabinet,
+                  nearestCabinetInfo.edge
+                );
+                
+                return {
+                  ...cabinet,
+                  position: snappedPosition,
+                  wallId: null // Clear wall association when snapping to cabinet
+                };
+              }
+            }
+            
             // Find nearest wall for snapping
             const nearestWall = findNearestWall(
               { x: newPosition.x + cabinet.width/2, y: newPosition.y + cabinet.depth/2 },
@@ -245,10 +273,16 @@ const Canvas: React.FC = () => {
             }
           }
           
+          // Make sure position is within room boundaries
+          const constrainedPosition = {
+            x: Math.max(0, Math.min(room.width - cabinet.width, newPosition.x)),
+            y: Math.max(0, Math.min(room.length - cabinet.depth, newPosition.y))
+          };
+          
           // No snapping, just update position
           return {
             ...cabinet,
-            position: newPosition,
+            position: constrainedPosition,
             wallId: null
           };
         }
@@ -278,10 +312,9 @@ const Canvas: React.FC = () => {
     const mouseY = e.clientY - rect.top;
     
     const roomCoords = screenToRoomCoordinates(mouseX, mouseY, panOffset, zoom);
-
-    console.log("Room coords for drop:", roomCoords);
-    console.log("Room dimensions:", room.width, "x", room.length);
-    console.log("Is point in room:", isPointInRoom(roomCoords, room));
+    
+    // Store initial drop position
+    setInitialDropPosition(roomCoords);
     
     if (draggingItem.type === 'cabinet') {
       // Make sure the cabinet is placed inside the room
@@ -297,25 +330,55 @@ const Canvas: React.FC = () => {
       
       const cabinet = draggingItem.item;
       
+      // Constrain position to room boundaries
+      const constrainedPosition = {
+        x: Math.max(0, Math.min(room.width - cabinet.width, roomCoords.x)),
+        y: Math.max(0, Math.min(room.length - cabinet.depth, roomCoords.y))
+      };
+      
       // Find nearest wall for snapping if enabled
-      let finalPosition = { ...roomCoords };
+      let finalPosition = { ...constrainedPosition };
       let wallId = null;
       let rotation = 0;
       
       if (isSnappingEnabled) {
-        const nearestWall = findNearestWall(
-          { x: roomCoords.x + cabinet.width/2, y: roomCoords.y + cabinet.depth/2 },
-          room.walls,
-          snapThreshold
-        );
-        
-        if (nearestWall) {
-          finalPosition = calculateSnapPositionToWall(
-            { ...cabinet, position: roomCoords },
-            nearestWall
+        // First check if we can snap to another cabinet
+        if (snapToCabinets && room.cabinets.length > 0) {
+          const nearestCabinetInfo = findNearestCabinet(
+            { 
+              ...cabinet, 
+              position: constrainedPosition,
+              id: 'temp-drop-id' // Temporary ID for the cabinet being dropped
+            },
+            room.cabinets,
+            snapThreshold
           );
-          wallId = nearestWall.id;
-          rotation = calculateCabinetRotationFromWall(nearestWall);
+          
+          if (nearestCabinetInfo) {
+            finalPosition = calculateSnapPositionToCabinet(
+              { ...cabinet, position: constrainedPosition },
+              nearestCabinetInfo.cabinet,
+              nearestCabinetInfo.edge
+            );
+          }
+        }
+        
+        // If not snapped to cabinet, try wall
+        if (finalPosition === constrainedPosition) {
+          const nearestWall = findNearestWall(
+            { x: constrainedPosition.x + cabinet.width/2, y: constrainedPosition.y + cabinet.depth/2 },
+            room.walls,
+            snapThreshold
+          );
+          
+          if (nearestWall) {
+            finalPosition = calculateSnapPositionToWall(
+              { ...cabinet, position: constrainedPosition },
+              nearestWall
+            );
+            wallId = nearestWall.id;
+            rotation = calculateCabinetRotationFromWall(nearestWall);
+          }
         }
       }
       
@@ -333,6 +396,9 @@ const Canvas: React.FC = () => {
         ...room,
         cabinets: [...room.cabinets, newCabinet]
       });
+      
+      // Select the newly added cabinet
+      setSelectedCabinet(newCabinet);
       
       toast({
         title: "Cabinet Added",
@@ -359,10 +425,6 @@ const Canvas: React.FC = () => {
         setDraggingItem(null);
         return;
       }
-
-      // Calculate distance to the wall
-      const distanceToWall = distancePointToWall(roomCoords, nearestWall);
-      console.log("Distance to wall:", distanceToWall, "threshold:", snapThreshold * 3);
       
       // Calculate door position on wall
       const doorPosition = calculateWallItemPlacement({...door, position: roomCoords}, nearestWall);
@@ -944,6 +1006,7 @@ const Canvas: React.FC = () => {
     });
   };
   
+  // Improved elevation view rendering
   const renderElevationCabinets = () => {
     if (!elevationMode || !selectedWall || !room || !room.cabinets || room.cabinets.length === 0) return null;
     
@@ -959,9 +1022,16 @@ const Canvas: React.FC = () => {
       Math.pow(wall.end.y - wall.start.y, 2)
     );
     
+    // Calculate wall angle for proper positioning
+    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
+    
     return wallCabinets.map((cabinet) => {
-      const x = mmToPixels(cabinet.position.x, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - cabinet.position.y - cabinet.height, zoom) + panOffset.y;
+      // Calculate position along the wall
+      const distanceAlongWall = Math.cos(wallAngle) * (cabinet.position.x - wall.start.x) +
+                              Math.sin(wallAngle) * (cabinet.position.y - wall.start.y);
+      
+      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
+      const y = mmToPixels(room.height - cabinet.height, zoom) + panOffset.y;
       const width = mmToPixels(cabinet.width, zoom);
       const height = mmToPixels(cabinet.height, zoom);
       const isSelected = selectedCabinet?.id === cabinet.id;
@@ -1020,9 +1090,20 @@ const Canvas: React.FC = () => {
     // Filter doors assigned to the selected wall
     const wallDoors = room.doors.filter(door => door.wallId === selectedWall);
     
+    // Get the selected wall
+    const wall = room.walls.find(w => w.id === selectedWall);
+    if (!wall) return null;
+    
+    // Calculate wall angle for proper positioning
+    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
+    
     return wallDoors.map((door) => {
+      // Calculate position along the wall
+      const distanceAlongWall = Math.cos(wallAngle) * (door.position.x - wall.start.x) +
+                              Math.sin(wallAngle) * (door.position.y - wall.start.y);
+      
       // Position in elevation view (bottom of wall)
-      const x = mmToPixels(door.position.x, zoom) + panOffset.x;
+      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
       const y = mmToPixels(room.height - door.height, zoom) + panOffset.y; // Doors typically go to floor
       const width = mmToPixels(door.width, zoom);
       const height = mmToPixels(door.height, zoom);
@@ -1069,8 +1150,19 @@ const Canvas: React.FC = () => {
     // Filter windows assigned to the selected wall
     const wallWindows = room.windows.filter(window => window.wallId === selectedWall);
     
+    // Get the selected wall
+    const wall = room.walls.find(w => w.id === selectedWall);
+    if (!wall) return null;
+    
+    // Calculate wall angle for proper positioning
+    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
+    
     return wallWindows.map((window) => {
-      const x = mmToPixels(window.position.x, zoom) + panOffset.x;
+      // Calculate position along the wall
+      const distanceAlongWall = Math.cos(wallAngle) * (window.position.x - wall.start.x) +
+                              Math.sin(wallAngle) * (window.position.y - wall.start.y);
+      
+      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
       const y = mmToPixels(room.height - window.position.y - window.height, zoom) + panOffset.y;
       const width = mmToPixels(window.width, zoom);
       const height = mmToPixels(window.height, zoom);
