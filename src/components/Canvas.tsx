@@ -13,7 +13,6 @@ import { ZoomIn, ZoomOut, Eye, RotateCcw, Move, Trash2, Magnet } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 
-// Import our new components
 import ToolBar from './canvas/ToolBar';
 import WallsRenderer from './canvas/WallsRenderer';
 import CabinetsRenderer from './canvas/CabinetsRenderer';
@@ -51,23 +50,19 @@ const Canvas: React.FC = () => {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [initialDropPosition, setInitialDropPosition] = useState<{ x: number, y: number } | null>(null);
   
-  // Event handlers and utility functions
   const resetView = () => {
     if (room && canvasRef.current) {
       const canvas = canvasRef.current;
       const canvasWidth = canvas.clientWidth;
       const canvasHeight = canvas.clientHeight;
       
-      // Calculate zoom to fit room with some padding
       const roomWidthPx = mmToPixels(room.width, 1);
       const roomLengthPx = mmToPixels(room.length, 1);
       
-      // Calculate zoom to fit based on shorter dimension with padding
       const zoomX = (canvasWidth - 100) / roomWidthPx;
       const zoomY = (canvasHeight - 100) / roomLengthPx;
       const newZoom = Math.min(Math.min(zoomX, zoomY), 1);
       
-      // Center the room
       const centerX = (canvasWidth / 2) - (mmToPixels(room.width, newZoom) / 2);
       const centerY = (canvasHeight / 2) - (mmToPixels(room.length, newZoom) / 2);
       
@@ -103,11 +98,9 @@ const Canvas: React.FC = () => {
     e.preventDefault();
     
     if (e.ctrlKey || e.metaKey) {
-      // Zoom with ctrl/cmd key
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       const newZoom = Math.max(0.1, Math.min(5, zoom + delta));
       
-      // Zoom centered on mouse position
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
         const mouseX = e.clientX - rect.left;
@@ -120,7 +113,6 @@ const Canvas: React.FC = () => {
         setPanOffset({ x: newPanOffsetX, y: newPanOffsetY });
       }
     } else {
-      // Pan with mouse wheel
       setPanOffset({
         x: panOffset.x - (e.deltaX * 0.5),
         y: panOffset.y - (e.deltaY * 0.5)
@@ -167,16 +159,13 @@ const Canvas: React.FC = () => {
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0) { // Left mouse button
       if (isMovingCabinet && selectedCabinet) {
-        // Start moving cabinet
         setCabinetStartPos({
           x: e.clientX,
           y: e.clientY
         });
       } else if (draggingItem) {
-        // Handle dropping the dragged item
         handleItemDrop(e);
       } else {
-        // Normal canvas dragging
         setIsDragging(true);
         setStartPan({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
       }
@@ -185,13 +174,11 @@ const Canvas: React.FC = () => {
   
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging && !isMovingCabinet && !draggingItem) {
-      // Pan canvas
       setPanOffset({
         x: e.clientX - startPan.x,
         y: e.clientY - startPan.y,
       });
     } else if (isMovingCabinet && selectedCabinet && room) {
-      // Move selected cabinet
       const dx = pixelsToMm(e.clientX - cabinetStartPos.x, zoom);
       const dy = pixelsToMm(e.clientY - cabinetStartPos.y, zoom);
       
@@ -200,7 +187,6 @@ const Canvas: React.FC = () => {
         y: e.clientY
       });
       
-      // Update cabinet position
       let updatedCabinets = room.cabinets.map(cabinet => {
         if (cabinet.id === selectedCabinet.id) {
           const newPosition = {
@@ -208,9 +194,7 @@ const Canvas: React.FC = () => {
             y: cabinet.position.y + dy
           };
           
-          // Check if snapping is enabled
           if (isSnappingEnabled) {
-            // Check if snapping to other cabinets is enabled and there are other cabinets
             if (snapToCabinets && room.cabinets.length > 1) {
               const nearestCabinetInfo = findNearestCabinet(
                 { ...cabinet, position: newPosition },
@@ -220,8 +204,7 @@ const Canvas: React.FC = () => {
               );
               
               if (nearestCabinetInfo) {
-                // Snap to nearest cabinet
-                const snappedPosition = calculateCabinetSnapPosition(
+                const snapResult = calculateCabinetSnapPosition(
                   { ...cabinet, position: newPosition },
                   nearestCabinetInfo.cabinet,
                   nearestCabinetInfo.edge
@@ -229,13 +212,12 @@ const Canvas: React.FC = () => {
                 
                 return {
                   ...cabinet,
-                  position: snappedPosition,
-                  wallId: null // Clear wall association when snapping to cabinet
+                  position: snapResult.position,
+                  wallId: null
                 };
               }
             }
             
-            // Find nearest wall for snapping
             const nearestWall = findNearestWall(
               { x: newPosition.x + cabinet.width/2, y: newPosition.y + cabinet.depth/2 },
               room.walls,
@@ -243,28 +225,25 @@ const Canvas: React.FC = () => {
             );
             
             if (nearestWall) {
-              // Snap to wall
-              const snappedPosition = calculateWallSnapPosition(
+              const snapResult = calculateWallSnapPosition(
                 { ...cabinet, position: newPosition },
                 nearestWall
               );
               
               return {
                 ...cabinet,
-                position: snappedPosition,
-                rotation: snappedPosition.rotation || 0,
+                position: snapResult.position,
+                rotation: snapResult.rotation || 0,
                 wallId: nearestWall.id
               };
             }
           }
           
-          // Make sure position is within room boundaries
           const constrainedPosition = {
             x: Math.max(0, Math.min(room.width - cabinet.width, newPosition.x)),
             y: Math.max(0, Math.min(room.length - cabinet.depth, newPosition.y))
           };
           
-          // No snapping, just update position
           return {
             ...cabinet,
             position: constrainedPosition,
@@ -285,24 +264,20 @@ const Canvas: React.FC = () => {
     setIsDragging(false);
   };
 
-  // Handle dropping a dragged item from the sidebar
   const handleItemDrop = (e: React.MouseEvent) => {
     if (!room || !draggingItem) return;
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    // Convert screen coordinates to room coordinates
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
     const roomCoords = screenToRoomCoordinates(mouseX, mouseY, panOffset, zoom);
     
-    // Store initial drop position
     setInitialDropPosition(roomCoords);
     
     if (draggingItem.type === 'cabinet') {
-      // Make sure the cabinet is placed inside the room
       if (!isPointInRoom(roomCoords, room)) {
         toast({
           title: "Invalid Placement",
@@ -315,25 +290,22 @@ const Canvas: React.FC = () => {
       
       const cabinet = draggingItem.item;
       
-      // Constrain position to room boundaries
       const constrainedPosition = {
         x: Math.max(0, Math.min(room.width - cabinet.width, roomCoords.x)),
         y: Math.max(0, Math.min(room.length - cabinet.depth, roomCoords.y))
       };
       
-      // Find nearest wall for snapping if enabled
       let finalPosition = { ...constrainedPosition };
       let wallId = null;
       let rotation = 0;
       
       if (isSnappingEnabled) {
-        // First check if we can snap to another cabinet
         if (snapToCabinets && room.cabinets.length > 0) {
           const nearestCabinetInfo = findNearestCabinet(
             { 
               ...cabinet, 
               position: constrainedPosition,
-              id: 'temp-drop-id' // Temporary ID for the cabinet being dropped
+              id: 'temp-drop-id'
             },
             room.cabinets,
             snapThreshold
@@ -348,27 +320,23 @@ const Canvas: React.FC = () => {
           }
         }
         
-        // If not snapped to cabinet, try wall
-        if (finalPosition === constrainedPosition) {
-          const nearestWall = findNearestWall(
-            { x: constrainedPosition.x + cabinet.width/2, y: constrainedPosition.y + cabinet.depth/2 },
-            room.walls,
-            snapThreshold
+        const nearestWall = findNearestWall(
+          { x: constrainedPosition.x + cabinet.width/2, y: constrainedPosition.y + cabinet.depth/2 },
+          room.walls,
+          snapThreshold
+        );
+        
+        if (nearestWall) {
+          const snapResult = calculateWallSnapPosition(
+            { ...cabinet, position: constrainedPosition },
+            nearestWall
           );
-          
-          if (nearestWall) {
-            const snapResult = calculateWallSnapPosition(
-              { ...cabinet, position: constrainedPosition },
-              nearestWall
-            );
-            finalPosition = snapResult.position;
-            wallId = nearestWall.id;
-            rotation = snapResult.rotation || 0;
-          }
+          finalPosition = snapResult.position;
+          wallId = nearestWall.id;
+          rotation = snapResult.rotation || 0;
         }
       }
       
-      // Create new cabinet with unique ID
       const newCabinet = {
         id: uuidv4(),
         ...cabinet,
@@ -377,13 +345,11 @@ const Canvas: React.FC = () => {
         wallId: wallId
       };
       
-      // Add to room
       setRoom({
         ...room,
         cabinets: [...room.cabinets, newCabinet]
       });
       
-      // Select the newly added cabinet
       setSelectedCabinet(newCabinet);
       
       toast({
@@ -392,14 +358,12 @@ const Canvas: React.FC = () => {
       });
     } 
     else if (draggingItem.type === 'door') {
-      // Doors must be placed on a wall
       const door = draggingItem.item;
       
-      // Find nearest wall for door placement
       const nearestWall = findNearestWall(
         roomCoords,
         room.walls,
-        snapThreshold * 3 // Increase threshold for easier placement
+        snapThreshold * 3
       );
       
       if (!nearestWall) {
@@ -412,11 +376,9 @@ const Canvas: React.FC = () => {
         return;
       }
       
-      // Calculate door position on wall
       const doorPosition = calculateWallItemPlacement({...door, position: roomCoords}, nearestWall);
       const doorRotation = calculateWallItemRotation(nearestWall);
       
-      // Create new door with unique ID
       const newDoor = {
         id: uuidv4(),
         ...door,
@@ -426,7 +388,6 @@ const Canvas: React.FC = () => {
         isOpen: false
       };
       
-      // Add to room
       setRoom({
         ...room,
         doors: [...(room.doors || []), newDoor]
@@ -438,14 +399,12 @@ const Canvas: React.FC = () => {
       });
     }
     else if (draggingItem.type === 'window') {
-      // Windows must be placed on a wall
       const window = draggingItem.item;
       
-      // Find nearest wall for window placement
       const nearestWall = findNearestWall(
         roomCoords,
         room.walls,
-        snapThreshold * 3 // Increase threshold for easier placement
+        snapThreshold * 3
       );
       
       if (!nearestWall) {
@@ -458,10 +417,8 @@ const Canvas: React.FC = () => {
         return;
       }
       
-      // Calculate window position on wall
       const windowPosition = calculateWallItemPlacement({...window, position: roomCoords}, nearestWall);
       
-      // Create new window with unique ID
       const newWindow = {
         id: uuidv4(),
         ...window,
@@ -469,7 +426,6 @@ const Canvas: React.FC = () => {
         wallId: nearestWall.id
       };
       
-      // Add to room
       setRoom({
         ...room,
         windows: [...(room.windows || []), newWindow]
@@ -481,7 +437,6 @@ const Canvas: React.FC = () => {
       });
     }
     
-    // Clear dragging item
     setDraggingItem(null);
   };
   
@@ -549,7 +504,6 @@ const Canvas: React.FC = () => {
   
   const toggle3DView = () => {
     setElevationMode(!elevationMode);
-    // If we're going to 3D view and no wall is selected, select the first wall
     if (!elevationMode && !selectedWall && room && room.walls.length > 0) {
       setSelectedWall(room.walls[0].id);
     }
