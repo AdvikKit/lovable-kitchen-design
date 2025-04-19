@@ -1,5 +1,5 @@
 
-import { Point, Wall, Cabinet, Door, Window } from '@/context/DesignContext';
+import { Point, Wall, Cabinet, Door, Window, Room } from '@/context/DesignContext';
 
 export interface SnapResult {
   snapped: boolean;
@@ -8,4 +8,4 @@ export interface SnapResult {
   wallId?: string | null;
 }
 
-export type { Point, Wall, Cabinet, Door, Window };
+export type { Point, Wall, Cabinet, Door, Window, Room };

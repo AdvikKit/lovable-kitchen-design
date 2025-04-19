@@ -2,34 +2,24 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useDesignContext } from '../context/DesignContext';
 import Grid from './Grid';
 import Ruler from './Ruler';
+import { toast } from '@/components/ui/use-toast';
+import { mmToPixels, formatMm, pixelsToMm, screenToRoomCoordinates } from '../utils/measurements';
+import { findNearestWall, calculateWallSnapPosition } from '../utils/snapping/wall-snapping';
+import { findNearestCabinet, calculateCabinetSnapPosition } from '../utils/snapping/cabinet-snapping';
+import { calculateWallItemRotation, calculateWallItemPlacement } from '../utils/snapping/wall-items-snapping';
+import { isPointInRoom } from '../utils/snapping/validation';
+import { v4 as uuidv4 } from 'uuid';
 import { ZoomIn, ZoomOut, Eye, RotateCcw, Move, Trash2, Magnet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
-import { 
-  mmToPixels, 
-  calculateMidpoint, 
-  formatMm, 
-  pixelsToMm, 
-  screenToRoomCoordinates,
-  roomToScreenCoordinates
-} from '../utils/measurements';
-import { toast } from '@/components/ui/use-toast';
-import { 
-  findNearestWall, 
-  calculateSnapPositionToWall, 
-  isPointInRoom,
-  calculateCabinetRotationFromWall,
-  calculateDoorSnapPositionToWall,
-  calculateWindowSnapPositionToWall,
-  calculateWallItemRotation,
-  calculateWallItemPlacement,
-  isOnWall,
-  canPlaceWallItem,
-  distancePointToWall,
-  findNearestCabinet,
-  calculateSnapPositionToCabinet
-} from '../utils/snapping';
-import { v4 as uuidv4 } from 'uuid';
+
+// Import our new components
+import ToolBar from './canvas/ToolBar';
+import WallsRenderer from './canvas/WallsRenderer';
+import CabinetsRenderer from './canvas/CabinetsRenderer';
+import DoorsRenderer from './canvas/DoorsRenderer';
+import WindowsRenderer from './canvas/WindowsRenderer';
+import ElevationView from './canvas/ElevationView';
 
 const Canvas: React.FC = () => {
   const { 
@@ -61,7 +51,7 @@ const Canvas: React.FC = () => {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [initialDropPosition, setInitialDropPosition] = useState<{ x: number, y: number } | null>(null);
   
-  // Reset view to fit room in viewport
+  // Event handlers and utility functions
   const resetView = () => {
     if (room && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -91,14 +81,12 @@ const Canvas: React.FC = () => {
     }
   };
   
-  // Center room when it's first created
   useEffect(() => {
     if (room) {
       resetView();
     }
   }, [room]);
-
-  // Track mouse position for drag and drop
+  
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({ x: e.clientX, y: e.clientY });
@@ -233,7 +221,7 @@ const Canvas: React.FC = () => {
               
               if (nearestCabinetInfo) {
                 // Snap to nearest cabinet
-                const snappedPosition = calculateSnapPositionToCabinet(
+                const snappedPosition = calculateCabinetSnapPosition(
                   { ...cabinet, position: newPosition },
                   nearestCabinetInfo.cabinet,
                   nearestCabinetInfo.edge
@@ -256,18 +244,15 @@ const Canvas: React.FC = () => {
             
             if (nearestWall) {
               // Snap to wall
-              const snappedPosition = calculateSnapPositionToWall(
+              const snappedPosition = calculateWallSnapPosition(
                 { ...cabinet, position: newPosition },
                 nearestWall
               );
               
-              // Calculate rotation based on wall
-              const wallRotation = calculateCabinetRotationFromWall(nearestWall);
-              
               return {
                 ...cabinet,
                 position: snappedPosition,
-                rotation: wallRotation,
+                rotation: snappedPosition.rotation || 0,
                 wallId: nearestWall.id
               };
             }
@@ -355,11 +340,11 @@ const Canvas: React.FC = () => {
           );
           
           if (nearestCabinetInfo) {
-            finalPosition = calculateSnapPositionToCabinet(
+            finalPosition = calculateCabinetSnapPosition(
               { ...cabinet, position: constrainedPosition },
               nearestCabinetInfo.cabinet,
               nearestCabinetInfo.edge
-            );
+            ).position;
           }
         }
         
@@ -372,12 +357,13 @@ const Canvas: React.FC = () => {
           );
           
           if (nearestWall) {
-            finalPosition = calculateSnapPositionToWall(
+            const snapResult = calculateWallSnapPosition(
               { ...cabinet, position: constrainedPosition },
               nearestWall
             );
+            finalPosition = snapResult.position;
             wallId = nearestWall.id;
-            rotation = calculateCabinetRotationFromWall(nearestWall);
+            rotation = snapResult.rotation || 0;
           }
         }
       }
@@ -569,763 +555,19 @@ const Canvas: React.FC = () => {
     }
   };
 
-  // Render dragging item preview (follows the mouse)
-  const renderDraggingItem = () => {
-    if (!draggingItem || !canvasRef.current) return null;
-    
-    const rect = canvasRef.current.getBoundingClientRect();
-    const mouseX = mousePos.x - rect.left;
-    const mouseY = mousePos.y - rect.top;
-    
-    if (draggingItem.type === 'cabinet') {
-      const cabinet = draggingItem.item;
-      const width = mmToPixels(cabinet.width, zoom);
-      const height = mmToPixels(cabinet.depth, zoom);
-      
-      return (
-        <g 
-          transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
-          opacity="0.7"
-        >
-          <rect 
-            x="0" 
-            y="0" 
-            width={width} 
-            height={height} 
-            fill="#94a3b8"
-            stroke="#475569"
-            strokeWidth="1"
-            strokeDasharray="4,4"
-          />
-          <text 
-            x={width / 2} 
-            y={height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize="12"
-          >
-            {cabinet.name}
-          </text>
-        </g>
-      );
-    } else if (draggingItem.type === 'door') {
-      const door = draggingItem.item;
-      const width = mmToPixels(door.width, zoom);
-      const height = mmToPixels(door.height, zoom);
-      
-      return (
-        <g 
-          transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
-          opacity="0.7"
-        >
-          <rect 
-            x="0" 
-            y="0" 
-            width={width} 
-            height={10} // Thinner representation for doors in top view
-            fill="#cbd5e1"
-            stroke="#475569"
-            strokeWidth="1"
-            strokeDasharray="4,4"
-          />
-          <text 
-            x={width / 2} 
-            y={20}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize="10"
-          >
-            Door
-          </text>
-        </g>
-      );
-    } else if (draggingItem.type === 'window') {
-      const window = draggingItem.item;
-      const width = mmToPixels(window.width, zoom);
-      const height = mmToPixels(window.height, zoom);
-      
-      return (
-        <g 
-          transform={`translate(${mouseX - width/2}px, ${mouseY - height/2}px)`}
-          opacity="0.7"
-        >
-          <rect 
-            x="0" 
-            y="0" 
-            width={width} 
-            height={10} // Thinner representation for windows in top view
-            fill="#bfdbfe"
-            stroke="#475569"
-            strokeWidth="1"
-            strokeDasharray="4,4"
-          />
-          <text 
-            x={width / 2} 
-            y={20}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize="10"
-          >
-            Window
-          </text>
-        </g>
-      );
-    }
-    
-    return null;
-  };
-  
-  const renderWalls = () => {
-    if (!room) return null;
-    
-    return room.walls.map((wall) => {
-      // Convert wall coordinates to pixels with zoom
-      const startX = mmToPixels(wall.start.x, zoom) + panOffset.x;
-      const startY = mmToPixels(wall.start.y, zoom) + panOffset.y;
-      const endX = mmToPixels(wall.end.x, zoom) + panOffset.x;
-      const endY = mmToPixels(wall.end.y, zoom) + panOffset.y;
-      
-      // Calculate wall direction and thickness
-      const dx = wall.end.x - wall.start.x;
-      const dy = wall.end.y - wall.start.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      const angle = Math.atan2(dy, dx);
-      
-      // Calculate wall thickness (perpendicular to wall direction)
-      const thickness = mmToPixels(wall.thickness, zoom);
-      const perpX = -Math.sin(angle) * thickness;
-      const perpY = Math.cos(angle) * thickness;
-      
-      // Calculate wall polygon points with thickness
-      const points = [
-        { x: startX, y: startY },
-        { x: endX, y: endY },
-        { x: endX + perpX, y: endY + perpY },
-        { x: startX + perpX, y: startY + perpY }
-      ];
-      
-      const pointsString = points.map(p => `${p.x},${p.y}`).join(' ');
-      
-      // Calculate wall length for display
-      const wallLengthMm = length;
-      
-      // Calculate midpoint for labels
-      const midpoint = calculateMidpoint(
-        { x: startX, y: startY },
-        { x: endX, y: endY }
-      );
-      
-      const midpointOuter = calculateMidpoint(
-        { x: startX + perpX, y: startY + perpY },
-        { x: endX + perpX, y: endY + perpY }
-      );
-      
-      const labelMidpoint = calculateMidpoint(midpoint, midpointOuter);
-      
-      // Determine wall orientation for label placement
-      const angle_deg = angle * (180 / Math.PI);
-      const isVertical = Math.abs(Math.abs(angle_deg) - 90) < 45;
-      
-      const labelOffsetX = isVertical ? -20 : 0;
-      const labelOffsetY = isVertical ? 0 : -20;
-      
-      const dimensionOffsetX = isVertical ? 0 : 0;
-      const dimensionOffsetY = isVertical ? 0 : 15;
-      
-      return (
-        <g 
-          key={wall.id}
-          onClick={() => handleWallClick(wall.id)}
-          style={{ cursor: 'pointer' }}
-        >
-          {/* Wall polygon with thickness */}
-          <polygon 
-            points={pointsString} 
-            fill={selectedWall === wall.id ? "#C5DCFF" : "#E2E8F0"}
-            stroke={selectedWall === wall.id ? "#3b82f6" : "#475569"}
-            strokeWidth="1"
-          />
-          
-          {/* Wall label */}
-          <text 
-            x={labelMidpoint.x + labelOffsetX} 
-            y={labelMidpoint.y + labelOffsetY}
-            className="kitchen-wall-label"
-            fill="#475569"
-            fontSize="12"
-            transform={isVertical ? `rotate(90,${labelMidpoint.x},${labelMidpoint.y})` : ''}
-          >
-            Wall {wall.label}
-          </text>
-          
-          {/* Wall dimension */}
-          <text 
-            x={labelMidpoint.x + dimensionOffsetX} 
-            y={labelMidpoint.y + dimensionOffsetY}
-            className="kitchen-wall-dimension"
-            fill="#475569"
-            fontSize="10"
-            transform={isVertical ? `rotate(90,${labelMidpoint.x},${labelMidpoint.y})` : ''}
-          >
-            {formatMm(wallLengthMm, wallLengthMm >= 1000)}
-          </text>
-          
-          {/* Elevation button for selected wall */}
-          {selectedWall === wall.id && (
-            <g 
-              className="elevation-button" 
-              transform={`translate(${midpoint.x + (isVertical ? -40 : 0)}, ${midpoint.y + (isVertical ? 0 : -40)})`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleElevationMode(wall.id);
-              }}
-            >
-              <circle cx="0" cy="0" r="15" fill={elevationMode ? "#3b82f6" : "#94a3b8"} />
-              <foreignObject x="-8" y="-8" width="16" height="16">
-                <Eye size={16} color="white" />
-              </foreignObject>
-            </g>
-          )}
-        </g>
-      );
-    });
-  };
-  
-  const renderCabinets = () => {
-    if (!room || !room.cabinets || room.cabinets.length === 0 || elevationMode) return null;
-    
-    return room.cabinets.map((cabinet) => {
-      const x = mmToPixels(cabinet.position.x, zoom) + panOffset.x;
-      const y = mmToPixels(cabinet.position.y, zoom) + panOffset.y;
-      const width = mmToPixels(cabinet.width, zoom);
-      const height = mmToPixels(cabinet.depth, zoom); // In top view, depth is height
-      const isSelected = selectedCabinet?.id === cabinet.id;
-      
-      // Base color based on cabinet color
-      let fillColor = cabinet.color;
-      if (fillColor === 'natural') fillColor = '#E3C395';
-      else if (fillColor === 'walnut') fillColor = '#5C4033';
-      else if (fillColor === 'cherry') fillColor = '#6E2E1C';
-      
-      return (
-        <g 
-          key={cabinet.id} 
-          transform={`translate(${x}, ${y}) rotate(${cabinet.rotation}, ${width/2}, ${height/2})`}
-          onClick={(e) => handleCabinetClick(e, cabinet.id)}
-          style={{ cursor: isMovingCabinet && isSelected ? 'move' : 'pointer' }}
-        >
-          <rect 
-            x="0" 
-            y="0" 
-            width={width} 
-            height={height} 
-            fill={fillColor}
-            stroke={isSelected ? "#3b82f6" : "#475569"}
-            strokeWidth={isSelected ? "2" : "1"}
-            opacity="0.8"
-          />
-          
-          {cabinet.type === 'base' && (
-            <rect 
-              x={width * 0.1} 
-              y={height * 0.1} 
-              width={width * 0.8} 
-              height={height * 0.8} 
-              fill="none"
-              stroke="#475569"
-              strokeWidth="1"
-              strokeDasharray="2,2"
-            />
-          )}
-          
-          <text 
-            x={width / 2} 
-            y={height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={cabinet.color === 'black' ? "white" : "black"}
-            fontSize={Math.max(8, 12 * zoom)}
-            fontWeight="bold"
-          >
-            {cabinet.name}
-          </text>
-          
-          <text 
-            x={width / 2} 
-            y={(height / 2) + 15 * zoom}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={cabinet.color === 'black' ? "white" : "black"}
-            fontSize={Math.max(6, 10 * zoom)}
-          >
-            {cabinet.width}×{cabinet.height}mm
-          </text>
-          
-          {isSelected && (
-            <g className="cabinet-controls">
-              <g 
-                transform={`translate(${width - 20}, ${-20})`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleCabinetMovement();
-                }}
-              >
-                <circle cx="0" cy="0" r="15" fill={isMovingCabinet ? "#3b82f6" : "#94a3b8"} />
-                <foreignObject x="-8" y="-8" width="16" height="16">
-                  <Move size={16} color="white" />
-                </foreignObject>
-              </g>
-              
-              <g 
-                transform={`translate(${width - 20}, ${20})`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteCabinet();
-                }}
-              >
-                <circle cx="0" cy="0" r="15" fill="#ef4444" />
-                <foreignObject x="-8" y="-8" width="16" height="16">
-                  <Trash2 size={16} color="white" />
-                </foreignObject>
-              </g>
-            </g>
-          )}
-        </g>
-      );
-    });
-  };
-
-  // Render doors in top view
-  const renderDoors = () => {
-    if (!room || !room.doors || room.doors.length === 0 || elevationMode) return null;
-    
-    return room.doors.map((door) => {
-      const x = mmToPixels(door.position.x, zoom) + panOffset.x;
-      const y = mmToPixels(door.position.y, zoom) + panOffset.y;
-      const width = mmToPixels(door.width, zoom);
-      const thickness = mmToPixels(100, zoom); // Constant door thickness for visualization
-      
-      return (
-        <g 
-          key={door.id} 
-          transform={`translate(${x}, ${y}) rotate(${door.rotation}, ${width/2}, ${thickness/2})`}
-        >
-          <rect 
-            x="0" 
-            y="0" 
-            width={width} 
-            height={thickness} 
-            fill="#cbd5e1"
-            stroke="#475569"
-            strokeWidth="2"
-          />
-          
-          {/* Door swing arc */}
-          <path 
-            d={`M ${width} ${thickness/2} A ${width} ${width} 0 0 ${door.isOpen ? 1 : 0} ${width} ${thickness/2 + width}`}
-            fill="none"
-            stroke="#475569"
-            strokeWidth="1"
-            strokeDasharray="5,5"
-          />
-          
-          <text 
-            x={width / 2} 
-            y={thickness / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize={Math.max(8, 12 * zoom)}
-          >
-            Door
-          </text>
-        </g>
-      );
-    });
-  };
-
-  // Render windows in top view
-  const renderWindows = () => {
-    if (!room || !room.windows || room.windows.length === 0 || elevationMode) return null;
-    
-    return room.windows.map((window) => {
-      const x = mmToPixels(window.position.x, zoom) + panOffset.x;
-      const y = mmToPixels(window.position.y, zoom) + panOffset.y;
-      const width = mmToPixels(window.width, zoom);
-      const thickness = mmToPixels(100, zoom); // Constant window thickness for visualization
-      
-      return (
-        <g 
-          key={window.id} 
-          transform={`translate(${x}, ${y})`}
-        >
-          <rect 
-            x="0" 
-            y="0" 
-            width={width} 
-            height={thickness} 
-            fill="#bfdbfe"
-            stroke="#475569"
-            strokeWidth="2"
-          />
-          
-          {/* Window panes */}
-          <line 
-            x1={width/2} 
-            y1="0" 
-            x2={width/2} 
-            y2={thickness} 
-            stroke="#475569" 
-            strokeWidth="1" 
-          />
-          
-          <line 
-            x1="0" 
-            y1={thickness/2} 
-            x2={width} 
-            y2={thickness/2} 
-            stroke="#475569" 
-            strokeWidth="1" 
-          />
-          
-          <text 
-            x={width / 2} 
-            y={thickness / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize={Math.max(8, 12 * zoom)}
-          >
-            Window
-          </text>
-        </g>
-      );
-    });
-  };
-  
-  // Improved elevation view rendering
-  const renderElevationCabinets = () => {
-    if (!elevationMode || !selectedWall || !room || !room.cabinets || room.cabinets.length === 0) return null;
-    
-    // Filter cabinets assigned to the selected wall
-    const wallCabinets = room.cabinets.filter(cabinet => cabinet.wallId === selectedWall);
-    
-    const wall = room.walls.find(w => w.id === selectedWall);
-    if (!wall) return null;
-    
-    // Calculate wall length
-    const wallLengthMm = Math.sqrt(
-      Math.pow(wall.end.x - wall.start.x, 2) + 
-      Math.pow(wall.end.y - wall.start.y, 2)
-    );
-    
-    // Calculate wall angle for proper positioning
-    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
-    
-    return wallCabinets.map((cabinet) => {
-      // Calculate position along the wall
-      const distanceAlongWall = Math.cos(wallAngle) * (cabinet.position.x - wall.start.x) +
-                              Math.sin(wallAngle) * (cabinet.position.y - wall.start.y);
-      
-      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - cabinet.height, zoom) + panOffset.y;
-      const width = mmToPixels(cabinet.width, zoom);
-      const height = mmToPixels(cabinet.height, zoom);
-      const isSelected = selectedCabinet?.id === cabinet.id;
-      
-      // Base color based on cabinet color
-      let fillColor = cabinet.color;
-      if (fillColor === 'natural') fillColor = '#E3C395';
-      else if (fillColor === 'walnut') fillColor = '#5C4033';
-      else if (fillColor === 'cherry') fillColor = '#6E2E1C';
-      
-      return (
-        <g 
-          key={cabinet.id} 
-          onClick={(e) => handleCabinetClick(e, cabinet.id)}
-          style={{ cursor: 'pointer' }}
-        >
-          <rect 
-            x={x}
-            y={y}
-            width={width} 
-            height={height} 
-            fill={fillColor}
-            stroke={isSelected ? "#3b82f6" : "#475569"}
-            strokeWidth={isSelected ? "2" : "1"}
-          />
-          
-          {/* Cabinet handle */}
-          <rect 
-            x={x + width * 0.45} 
-            y={y + height * 0.5} 
-            width={width * 0.1} 
-            height={height * 0.2} 
-            fill="#94a3b8"
-          />
-          
-          <text 
-            x={x + width / 2} 
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill={cabinet.color === 'black' ? "white" : "black"}
-            fontSize={Math.max(8, 12 * zoom)}
-            fontWeight="bold"
-          >
-            {cabinet.name}
-          </text>
-        </g>
-      );
-    });
-  };
-
-  // Render doors in elevation view
-  const renderElevationDoors = () => {
-    if (!elevationMode || !selectedWall || !room || !room.doors) return null;
-    
-    // Filter doors assigned to the selected wall
-    const wallDoors = room.doors.filter(door => door.wallId === selectedWall);
-    
-    // Get the selected wall
-    const wall = room.walls.find(w => w.id === selectedWall);
-    if (!wall) return null;
-    
-    // Calculate wall angle for proper positioning
-    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
-    
-    return wallDoors.map((door) => {
-      // Calculate position along the wall
-      const distanceAlongWall = Math.cos(wallAngle) * (door.position.x - wall.start.x) +
-                              Math.sin(wallAngle) * (door.position.y - wall.start.y);
-      
-      // Position in elevation view (bottom of wall)
-      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - door.height, zoom) + panOffset.y; // Doors typically go to floor
-      const width = mmToPixels(door.width, zoom);
-      const height = mmToPixels(door.height, zoom);
-      
-      return (
-        <g key={door.id}>
-          <rect 
-            x={x} 
-            y={y} 
-            width={width} 
-            height={height} 
-            fill="#cbd5e1"
-            stroke="#475569"
-            strokeWidth="2"
-          />
-          
-          {/* Door handle */}
-          <circle 
-            cx={x + width * 0.9} 
-            cy={y + height * 0.5} 
-            r={width * 0.03} 
-            fill="#475569"
-          />
-          
-          <text 
-            x={x + width / 2} 
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize={Math.max(8, 12 * zoom)}
-          >
-            Door
-          </text>
-        </g>
-      );
-    });
-  };
-
-  // Render windows in elevation view
-  const renderElevationWindows = () => {
-    if (!elevationMode || !selectedWall || !room || !room.windows) return null;
-    
-    // Filter windows assigned to the selected wall
-    const wallWindows = room.windows.filter(window => window.wallId === selectedWall);
-    
-    // Get the selected wall
-    const wall = room.walls.find(w => w.id === selectedWall);
-    if (!wall) return null;
-    
-    // Calculate wall angle for proper positioning
-    const wallAngle = Math.atan2(wall.end.y - wall.start.y, wall.end.x - wall.start.x);
-    
-    return wallWindows.map((window) => {
-      // Calculate position along the wall
-      const distanceAlongWall = Math.cos(wallAngle) * (window.position.x - wall.start.x) +
-                              Math.sin(wallAngle) * (window.position.y - wall.start.y);
-      
-      const x = mmToPixels(distanceAlongWall, zoom) + panOffset.x;
-      const y = mmToPixels(room.height - window.position.y - window.height, zoom) + panOffset.y;
-      const width = mmToPixels(window.width, zoom);
-      const height = mmToPixels(window.height, zoom);
-      
-      return (
-        <g key={window.id}>
-          <rect 
-            x={x} 
-            y={y} 
-            width={width} 
-            height={height} 
-            fill="#bfdbfe"
-            stroke="#475569"
-            strokeWidth="2"
-          />
-          
-          {/* Window panes */}
-          <line 
-            x1={x + width/2} 
-            y1={y} 
-            x2={x + width/2} 
-            y2={y + height} 
-            stroke="#475569" 
-            strokeWidth="1" 
-          />
-          
-          <line 
-            x1={x} 
-            y1={y + height/2} 
-            x2={x + width} 
-            y2={y + height/2} 
-            stroke="#475569" 
-            strokeWidth="1" 
-          />
-          
-          <text 
-            x={x + width / 2} 
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#1e293b"
-            fontSize={Math.max(8, 12 * zoom)}
-          >
-            Window
-          </text>
-        </g>
-      );
-    });
-  };
-  
-  const renderElevation = () => {
-    if (!elevationMode || !selectedWall || !room) return null;
-    
-    const wall = room.walls.find(w => w.id === selectedWall);
-    if (!wall) return null;
-    
-    const wallLengthMm = Math.sqrt(
-      Math.pow(wall.end.x - wall.start.x, 2) + 
-      Math.pow(wall.end.y - wall.start.y, 2)
-    );
-    
-    const wallWidthPx = mmToPixels(wallLengthMm, zoom);
-    const wallHeightPx = mmToPixels(room.height, zoom);
-    
-    return (
-      <>
-        <rect
-          x={panOffset.x}
-          y={panOffset.y}
-          width={wallWidthPx}
-          height={wallHeightPx}
-          fill="#f8fafc"
-          stroke="#475569"
-          strokeWidth="2"
-        />
-        
-        <text
-          x={panOffset.x + wallWidthPx / 2}
-          y={panOffset.y + 20}
-          textAnchor="middle"
-          fill="#475569"
-          fontSize="14"
-          fontWeight="bold"
-        >
-          Wall {wall.label} - Elevation View
-        </text>
-        
-        <text
-          x={panOffset.x + wallWidthPx / 2}
-          y={panOffset.y + 40}
-          textAnchor="middle"
-          fill="#475569"
-          fontSize="12"
-        >
-          {formatMm(wallLengthMm, wallLengthMm >= 1000)} × {formatMm(room.height, room.height >= 1000)}
-        </text>
-        
-        <line
-          x1={panOffset.x}
-          y1={panOffset.y + wallHeightPx}
-          x2={panOffset.x + wallWidthPx}
-          y2={panOffset.y + wallHeightPx}
-          stroke="#64748b"
-          strokeWidth="2"
-        />
-        
-        {renderElevationCabinets()}
-        {renderElevationDoors()}
-        {renderElevationWindows()}
-        
-        <g
-          onClick={() => setElevationMode(false)}
-          style={{ cursor: 'pointer' }}
-          transform={`translate(${panOffset.x + wallWidthPx - 30}, ${panOffset.y + 30})`}
-        >
-          <circle cx="0" cy="0" r="15" fill="#ef4444" />
-          <text x="0" y="0" textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="12">×</text>
-        </g>
-      </>
-    );
-  };
-  
   return (
     <div className="flex flex-col h-full">
-      <div className="flex justify-between p-2 bg-slate-200 items-center">
-        <div className="flex items-center">
-          <Toggle
-            pressed={isSnappingEnabled}
-            onPressedChange={toggleSnapping}
-            aria-label="Toggle snapping"
-            className="mr-2"
-          >
-            <Magnet size={16} className="mr-1" />
-            Snap
-          </Toggle>
-          
-          <Button 
-            variant={elevationMode ? "default" : "outline"} 
-            size="sm" 
-            onClick={toggle3DView}
-            disabled={!room}
-            className="mr-2"
-          >
-            <Eye size={16} className="mr-1" />
-            3D View
-          </Button>
-        </div>
-        <div className="flex items-center">
-          <Button variant="outline" size="sm" onClick={resetView} className="mr-1">
-            <RotateCcw size={16} />
-            <span className="ml-1">Center</span>
-          </Button>
-          <span className="mx-2 text-sm">Zoom: {Math.round(zoom * 100)}%</span>
-          <Button variant="outline" size="sm" onClick={handleZoomOut} className="mr-1">
-            <ZoomOut size={16} />
-            <span className="ml-1">-</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleZoomIn}>
-            <ZoomIn size={16} />
-            <span className="ml-1">+</span>
-          </Button>
-        </div>
-      </div>
+      <ToolBar 
+        isSnappingEnabled={isSnappingEnabled}
+        toggleSnapping={toggleSnapping}
+        elevationMode={elevationMode}
+        toggle3DView={toggle3DView}
+        room={room}
+        resetView={resetView}
+        zoom={zoom}
+        handleZoomOut={handleZoomOut}
+        handleZoomIn={handleZoomIn}
+      />
       
       <div 
         ref={canvasRef}
@@ -1340,15 +582,60 @@ const Canvas: React.FC = () => {
           {!elevationMode && <Ruler />}
           <g transform={`translate(${elevationMode ? 0 : 30}px, ${elevationMode ? 0 : 30}px)`}> 
             {!elevationMode && <Grid />}
-            {elevationMode ? renderElevation() : (
+            {elevationMode ? (
+              room && selectedWall && (
+                <ElevationView 
+                  room={room}
+                  selectedWall={selectedWall}
+                  zoom={zoom}
+                  panOffset={panOffset}
+                  setElevationMode={setElevationMode}
+                />
+              )
+            ) : (
               <>
-                {renderWalls()}
-                {renderCabinets()}
-                {renderDoors()}
-                {renderWindows()}
+                {room && (
+                  <WallsRenderer 
+                    walls={room.walls}
+                    selectedWall={selectedWall}
+                    zoom={zoom}
+                    panOffset={panOffset}
+                    elevationMode={elevationMode}
+                    handleWallClick={handleWallClick}
+                    toggleElevationMode={toggleElevationMode}
+                  />
+                )}
+                {room && (
+                  <CabinetsRenderer 
+                    cabinets={room.cabinets}
+                    selectedCabinet={selectedCabinet}
+                    zoom={zoom}
+                    panOffset={panOffset}
+                    elevationMode={elevationMode}
+                    isMovingCabinet={isMovingCabinet}
+                    handleCabinetClick={handleCabinetClick}
+                    toggleCabinetMovement={toggleCabinetMovement}
+                    deleteCabinet={deleteCabinet}
+                  />
+                )}
+                {room && (
+                  <DoorsRenderer 
+                    doors={room.doors}
+                    zoom={zoom}
+                    panOffset={panOffset}
+                    elevationMode={elevationMode}
+                  />
+                )}
+                {room && (
+                  <WindowsRenderer 
+                    windows={room.windows}
+                    zoom={zoom}
+                    panOffset={panOffset}
+                    elevationMode={elevationMode}
+                  />
+                )}
               </>
             )}
-            {draggingItem && renderDraggingItem()}
           </g>
         </svg>
       </div>
